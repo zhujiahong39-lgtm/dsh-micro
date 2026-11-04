@@ -75,10 +75,11 @@ lib/client.js    渲染端 bundle：设置面板 + 硬件事件 → 动作的运
 lib/bridge.cjs   HID 子进程：帧解析、请求队列、自动重连
 lib/hid.cjs      HID 运行时加载器：内置副本 → 用户自装副本 → 明确降级
 lib/vendor/      内联的 node-hid 运行时（MIT/BSD，见 NOTICE.md）
-locale/          插件清单文案（meta.title / meta.description），en + zh
+locale/          插件清单文案 + 面板文案字典（meta.title / meta.description + 434 条词条），en + zh
 icon.svg         插件列表与设置页的图标
 cordis.patch.yml bundle 叠加层（纯 insert，可热挂载）
 test/            冒烟测试：面板渲染、运行时行为、设备层、降级启动、真机宿主
+tools/           开发用工具：词条编译（`npm run i18n`）
 ```
 
 ## 遵循的 DSH 插件规范
@@ -96,10 +97,23 @@ test/            冒烟测试：面板渲染、运行时行为、设备层、降
 | 不重复打包宿主 | `dependencies` 为空；宿主包只由 profile 提供。原生模块（node-hid）内联在 `lib/vendor/`，不触发 pnpm 的 `strictDepBuilds` |
 | 资源归 context 所有 | 宿主侧子进程 / 定时器 / HTTP 路由 / SSE 响应都在 `ctx.effect` 的 disposer 里释放；渲染端样式表同样注册为 effect |
 | 样式只用主题令牌 | 面板容器、文字、边框、控件读 `--dsw-alias-*`（经 `--cm-*` 间接映射，令牌缺失时有回退）；键帽、旋钮、摇杆、状态灯属于设备渲染，保留字面色 |
-| UI 文案走 locale 服务 | `ctx.locale.register("codex-micro", { en, zh })`，取不到服务时用内置中文兜底 |
+| UI 文案走 locale 服务 | 全部 434 条文案（面板、按钮、状态、提示、手势说明、诊断日志）都经 `t()`；`ctx.locale.register("codex-micro", { en, zh })` 注册扁平字典，取不到服务时回退内置中文。渲染端无裸中文字面量，`npm test` 会断言 |
 | 不写组件外 DOM | toast 由 `ToastHost` 在 slot 内渲染，不再向 `document.body` 追加节点 |
 
-`locale/*.json` 由 `lib/client.js` 里的同一份字典生成（`node .tools/sync-locale.mjs`），`npm test` 会断言两边一致——避免插件列表显示一种语言、面板里显示另一种。
+### 文案是怎么组织的
+
+`t()` 的查找顺序是 **宿主 locale 服务 → 内置中文字典 → key 本身**。key 是扁平的点分路径（`editor.actionNoResults`、`catalog.approval.allow.label`），因为宿主是按 key 直接索引字典的，嵌套对象会让每条文案都退化成一个裸 key。
+
+真源是 `tools/i18n-strings.mjs`（`key: [中文, English]`）。改完文案跑：
+
+```bash
+npm run i18n     # 编译进 lib/client.js，并重写 locale/{zh,en}.json
+npm test         # 断言三份副本一致、英文不含中文、占位符两侧对齐
+```
+
+`npm test` 还会扫描 bundle，确认字典之外没有硬编码中文——漏掉一条就失败，不会悄悄只显示一种语言。
+
+有一类文案必须留在模块级常量里（键帽表、旋钮手势表）：它们在 `apply` 绑定 locale 之前就求值了，直接调 `t()` 会被永久冻结成导入时的语言。这些表存的是 key，由渲染处翻译。
 
 持久化文件：`~/.dsh/codex-micro-bindings.json`（原子写：先写 `.tmp` 再 rename；读入前校验体积与形状）
 

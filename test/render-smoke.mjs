@@ -220,5 +220,82 @@ const htmlAgent = renderToStaticMarkup(React.createElement(section));
 assert.ok(htmlAgent.includes('分配'), 'agent key dialog did not open');
 delete windowStub.__CM_DEBUG_AGENT__;
 
+// Every string must resolve: a raw key in the markup means a message that no
+// dictionary covers, and it would ship as gibberish to users.
+const KEY_PREFIX =
+  'panel|state|action|device|options|editor|agent|knob|encoder|analog|catalog|toast|log|diag|cmd|cmdDesc|keycap|summary|dialog|gesture|short|status|editor|reset|meta';
+const leaked = (haystack) =>
+  (haystack.match(new RegExp(`\\b(?:${KEY_PREFIX})\\.[A-Za-z][A-Za-z0-9.]*\\b`)) ?? [])[0];
+for (const [label, markup] of [
+  ['initial', html],
+  ['connected', html2],
+  ['keycap editor', htmlEditor],
+  ['stick editor', htmlStick],
+  ['agent dialog', htmlAgent],
+]) {
+  assert.ok(!leaked(markup), `raw message key leaked into ${label}: ${leaked(markup)}`);
+}
+
+// Fourth pass: English. The Host locale service indexes the dictionary by key
+// and substitutes `{name}`; mimic that and render again. This is the check that
+// the whole migration exists for — copy the panel shows in a second language.
+const localeDicts = new Map();
+const fakeLocale = {
+  register(namespace, dictionaries) {
+    for (const [lang, dict] of Object.entries(dictionaries)) {
+      localeDicts.set(`${namespace}:${lang}`, dict);
+    }
+    return () => {};
+  },
+  bind(namespace) {
+    return (key, params) => {
+      const template = localeDicts.get(`${namespace}:en`)?.[key];
+      if (template === undefined) return key;
+      if (!params) return template;
+      return template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match));
+    };
+  },
+};
+
+const ctxEn = {
+  effect: (fn) => {
+    const dispose = fn();
+    return typeof dispose === 'function' ? dispose : () => {};
+  },
+  inject(names, fn) {
+    if (names.includes('locale')) fn({ locale: fakeLocale });
+  },
+  get(name) {
+    if (name === 'sessions') return { list: sessions };
+    return undefined;
+  },
+  slots: {
+    inject(name, fn) {
+      fn();
+    },
+    register(options, component) {
+      section = component;
+      return () => {};
+    },
+  },
+};
+
+moduleExports.apply(ctxEn);
+assert.ok(localeDicts.has('codex-micro:en'), 'english dictionary was not registered');
+
+const htmlEn = renderToStaticMarkup(React.createElement(section));
+for (const needle of ['Connection', 'Firmware', 'Battery', 'Codex Micro']) {
+  assert.ok(htmlEn.includes(needle), `english panel missing: ${needle}`);
+}
+// Chat titles come from the user's data and stay as-is; everything else must be
+// English, or the panel is mixing languages again.
+const userData = /修复登录流程|整理协议文档/g;
+assert.ok(
+  !/[\u4e00-\u9fff]/.test(htmlEn.replace(userData, '')),
+  'english panel still contains Chinese copy',
+);
+assert.ok(!leaked(htmlEn), `raw message key leaked into english panel: ${leaked(htmlEn)}`);
+
 console.log('render smoke test: OK,', html.length, '/', html2.length, 'bytes of markup');
 console.log('  dialogs: keycap', htmlEditor.length, '| stick', htmlStick.length, '| agent', htmlAgent.length);
+console.log('  english pass:', htmlEn.length, 'bytes, no Chinese copy, no raw keys');

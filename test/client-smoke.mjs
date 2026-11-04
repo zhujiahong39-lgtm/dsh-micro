@@ -317,13 +317,55 @@ for (let i = source.indexOf('{', dictStart); i < source.length; i += 1) {
   }
 }
 const bundleLocale = new Function(`return ${source.slice(source.indexOf('{', dictStart), dictEnd)}`)();
-for (const lang of Object.keys(bundleLocale)) {
+const locales = Object.keys(bundleLocale);
+assert.deepEqual(locales.sort(), ['en', 'zh'], 'both shipped locales are present');
+
+// The panel looks strings up flat (the Host indexes the dictionary by key, it
+// does not walk a path), so every entry must be a plain string, not a nested
+// object — a nested table silently degrades every label to its key.
+for (const lang of locales) {
+  const dict = bundleLocale[lang];
+  const nested = Object.entries(dict).filter(([, value]) => typeof value !== 'string');
+  assert.deepEqual(nested.map(([key]) => key), [], `${lang} dictionary is flat`);
+  assert.ok(Object.keys(dict).length > 400, `${lang} dictionary covers the panel (${Object.keys(dict).length} keys)`);
+}
+
+// Every key must exist in both languages, or the UI mixes languages at runtime.
+const zhKeys = Object.keys(bundleLocale.zh).sort();
+const enKeys = Object.keys(bundleLocale.en).sort();
+assert.deepEqual(enKeys, zhKeys, 'zh and en define the same keys');
+
+for (const lang of locales) {
   const file = JSON.parse(readFileSync(new URL(`../locale/${lang}.json`, import.meta.url), 'utf8'));
+  const { meta, ...strings } = file;
   assert.deepEqual(
-    file,
+    strings,
     bundleLocale[lang],
-    `locale/${lang}.json drifted from the bundle dictionary — run node .tools/sync-locale.mjs`,
+    `locale/${lang}.json drifted from the bundle dictionary — run node tools/i18n.mjs --write`,
   );
-  assert.ok(file.meta?.title && file.meta?.description, `locale/${lang}.json carries meta.title and meta.description`);
+  assert.ok(meta?.title && meta?.description, `locale/${lang}.json carries meta.title and meta.description`);
 }
 console.log('  locale/*.json matches the registered dictionary');
+
+// No hard-coded Chinese outside the dictionaries: any literal that creeps back
+// in is a string no other language will ever show.
+const withoutDict =
+  source.slice(0, dictStart) +
+  '\n'.repeat(source.slice(dictStart, dictEnd).split('\n').length - 1) +
+  source.slice(dictEnd);
+const strayHan = withoutDict
+  .split('\n')
+  .map((line, index) => ({ line: index + 1, text: line.trim() }))
+  .filter(({ text }) => /[\u4e00-\u9fff]/.test(text))
+  .filter(({ text }) => !text.startsWith('//') && !text.startsWith('*') && !text.startsWith('/*'));
+assert.deepEqual(strayHan, [], 'no hard-coded Chinese copy outside the dictionaries');
+console.log('  no stray Chinese literals outside LOCALE');
+
+// Every literal t("...") must name a key the dictionary defines. A typo or a
+// retired key renders itself in the panel, which is the exact failure the
+// dictionaries exist to prevent.
+const literalKeys = new Set();
+for (const match of source.matchAll(/\bt\(\s*"([^"]+)"\s*[,)]/g)) literalKeys.add(match[1]);
+const undefinedKeys = [...literalKeys].filter((key) => !(key in bundleLocale.zh));
+assert.deepEqual(undefinedKeys, [], 't() references a key the dictionary does not define');
+console.log(`  all ${literalKeys.size} literal t() keys are defined`);
