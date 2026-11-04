@@ -254,6 +254,44 @@ assert.ok(html.includes('未检测到'), 'disconnected status label missing');
 assert.ok(html.includes('cm-surface'), 'device preview missing');
 assert.ok((html.match(/cm-key/g) ?? []).length >= 10, 'layout grid looks empty');
 
+// ---- device card geometry ----------------------------------------------
+// The original Codex app draws the device as a SQUARE 4x4 grid capped at
+// 15rem (app.asar → webview/assets/async/623696.*.js). A rectangular grid
+// stretches the keys and squashes the round controls, which is exactly how the
+// card used to look wrong. These numbers are copied from the upstream bundle,
+// so pin them here — the DOM assertions above cannot see a wrong aspect ratio.
+const css = documentStub.head.children.map((tag) => tag.textContent).join('\n');
+const rule = (selector) => {
+  const at = css.indexOf(`${selector}{`);
+  if (at < 0) return '';
+  return css.slice(at + selector.length + 1, css.indexOf('}', at));
+};
+assert.ok(css.length > 0, 'the panel did not inject its stylesheet');
+
+const surface = rule('.cm-surface');
+assert.ok(/aspect-ratio:1\/1/.test(surface), `the device surface must stay square, got: ${surface}`);
+assert.ok(/max-width:15rem/.test(surface), `the device surface must cap at 15rem, got: ${surface}`);
+assert.ok(/gap:4px/.test(surface), `the 4x4 gutters must be 4px, got: ${surface}`);
+
+// The encoder is 92% of BOTH axes: sizing it by width alone overflows the row
+// and flattens the circle.
+assert.ok(/width:92%;height:92%/.test(rule('.cm-knob')), `the encoder must be square, got: ${rule('.cm-knob')}`);
+assert.ok(/width:72%;height:72%/.test(rule('.cm-stick-knob')), `the joystick puck must be 72%, got: ${rule('.cm-stick-knob')}`);
+assert.ok(/width:58%;height:58%/.test(rule('.cm-touch-pad')), `the touch pad must be 58%, got: ${rule('.cm-touch-pad')}`);
+
+// The agent cap keeps its frosted fill; the session status rides on a
+// translucent light layer, like the physical backlight. Repainting the whole
+// cap with a status gradient is what this replaced.
+assert.ok(!/linear-gradient\(180deg/.test(css), 'the agent cap must not be repainted with a status gradient');
+assert.ok(css.includes('opacity:var(--cm-light-o)'), 'the status must ride on a translucent light layer');
+assert.ok(/--cm-light-o:\.4/.test(css), 'an assigned agent key must light at 40%, matching the original');
+assert.ok(/--cm-light-o:0/.test(rule('.cm-key.agent')), 'an unassigned agent key must not light');
+
+// The violet dot marks the key and never carries state.
+const dot = rule('.cm-key .cap-dot');
+assert.ok(/width:12px/.test(dot) && /height:12px/.test(dot), `the violet dot must stay 12px, got: ${dot}`);
+assert.ok(!css.includes('.cap-dot[data-status'), 'the dot must not change colour with the session status');
+
 // Second pass: a connected snapshot (battery row, agent-key colours).
 windowStub.__CM_INITIAL_STATE__ = statePayload;
 const html2 = renderToStaticMarkup(React.createElement(section));
