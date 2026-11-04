@@ -8,6 +8,7 @@ DeepSeek Harness 插件：把 **Work Louder “Codex Micro” HID 小键盘**（
 ## 安装
 
 **不需要编译，不需要 `pnpm approve-builds`，不需要本机装 Node 工具链。**
+（设备桥是个 `node` 子进程，用的是宿主自己带的运行时；在 Electron 宿主里它由 `ELECTRON_RUN_AS_NODE=1` 拉起，见「已知偏离」。）
 
 在 Harness 里装（插件市场搜索 `dsh-plugin-micro`），或命令行：
 
@@ -19,8 +20,8 @@ dsh plugin --profile desktop add dsh-plugin-micro
 
 | 项 | 要求 |
 |---|---|
-| DeepSeek Harness | `>= 0.2.1-rc.3`（清单里的 `engines.dsh` 会在安装前拦掉更老的宿主） |
-| Node | `^22.19.0 || >= 24.0.0`（用宿主自带的那个，插件不下载 node） |
+| DeepSeek Harness | `>= 0.2.1-rc.3`（清单里的 `engines.dsh` 由市场与安装闸门用来判定兼容性；官方 installer 本身不强制这个字段，所以老宿主装得上但可能跑不对） |
+| Node | `^22.19.0 || >= 24.0.0`（宿主自带的运行时，插件不下载 node） |
 | 系统 | Windows 10+ / macOS / Linux（HID 运行时自带各平台预编译产物） |
 
 **为什么装起来这么干净**：HID 运行时（node-hid）已经内联在本包里（`lib/vendor/`，MIT/BSD，见 `lib/vendor/NOTICE.md`），
@@ -32,7 +33,7 @@ dsh plugin --profile desktop add dsh-plugin-micro
 
 - **设备层**：独立 `node` 子进程 + 内置 HID 运行时，自动发现/重连（1/2/5/10 s 退避）；VID `0x303A`、usagePage `0xFF00`、PID 33632 / 33431 / 33432；读取固件/电量/层信息；断线时拒绝在途请求、拔线后立即释放接口。
 - **动作模型**：绑定值是带前缀的动作字符串 —— `command:<id>`（命令）、`text:<文本>`、`url:<链接>`、`skill:<技能名>`、`ptt`（按住说话）、`noop`。无前缀的旧私有动词（`session.new`、`effort.up` 等）继续兼容。
-- **39 款键帽全部可执行**：键帽的默认动作直接由原版 `original` 描述推导，换任何一款键帽都有实际行为；找不到宿主能力时给出「此操作在此处不可用」提示，而不是静默失效。
+- **39 款键帽，34 款有可执行动作**：键帽的默认动作直接由原版 `original` 描述推导；剩下 5 款是空白键（`EMPT1`–`EMPT5`，原版就是 `custom-shortcut`），装上后保持未绑定。找不到宿主能力时给出「此操作在此处不可用」提示，而不是静默失效。
 - **硬件映射**：6 个智能体键、8 个命令键、宽 MIC 键、摇杆四方向、旋钮旋转/单击/长按。
 - **旋钮四模式**：输入区导航（合成 `ComposerNavigation` / 方向键）、对话滚动（±160 px）、推理强度（顺时针降低、逆时针提高）、自定义（左右旋转/单击/长按四个手势独立绑定）；500 ms 长按在非自定义模式跳到设置页。
 - **摇杆**：四扇区几何、死区 0.1 / 触发阈值 0.5、边沿触发、有输入区时 220 ms 延迟防误触，可在设置里整体关闭。
@@ -96,9 +97,25 @@ tools/           开发用工具：词条编译（`npm run i18n`）
 | 客户端注入顺序 | `dsh.client.inject` 只列宿主真实存在的包（`immediately` 只排序激活，不改变解析） |
 | 不重复打包宿主 | `dependencies` 为空；宿主包只由 profile 提供。原生模块（node-hid）内联在 `lib/vendor/`，不触发 pnpm 的 `strictDepBuilds` |
 | 资源归 context 所有 | 宿主侧子进程 / 定时器 / HTTP 路由 / SSE 响应都在 `ctx.effect` 的 disposer 里释放；渲染端样式表同样注册为 effect |
-| 样式只用主题令牌 | 面板容器、文字、边框、控件读 `--dsw-alias-*`（经 `--cm-*` 间接映射，令牌缺失时有回退）；键帽、旋钮、摇杆、状态灯属于设备渲染，保留字面色 |
+| 样式只用主题令牌 | 面板容器、文字、边框、控件读 `--dsw-alias-*`（经 `--cm-*` 间接映射，令牌缺失时有回退）；键帽、旋钮、摇杆、状态灯属于设备渲染，保留字面色。`test/tokens.mjs` 断言每个引用都在宿主主题真实定义的 349 个令牌里——写错一个名字时浏览器会静默丢属性，渲染测试抓不到 |
 | UI 文案走 locale 服务 | 全部 434 条文案（面板、按钮、状态、提示、手势说明、诊断日志）都经 `t()`；`ctx.locale.register("codex-micro", { en, zh })` 注册扁平字典，取不到服务时回退内置中文。渲染端无裸中文字面量，`npm test` 会断言 |
-| 不写组件外 DOM | toast 由 `ToastHost` 在 slot 内渲染，不再向 `document.body` 追加节点 |
+| 不替换应用根 | 面板只注册进 `settings.section`；toast 由 `ToastHost` 在 slot 内渲染，不向 `document.body` 追加节点 |
+| 不写组件外 DOM | **有例外**：composer 的文本插入 / 提交 / 滚动 / 导航要直接操作宿主输入区。这是规范明确不建议的做法，但没有可用替代，见「已知偏离」 |
+
+### 已知偏离（及其原因）
+
+官方 `cordis-plugin-development` 规范里有三条本插件做不到，都是**宿主没给入口**而不是图省事。写在这里，是为了让下一个维护者知道这是判断，不是疏忽：
+
+1. **操作宿主 composer**（`practices.md`：“Do not write DOM outside your component”）。键盘的文本插入、发送、滚动、输入区导航只能落在宿主输入框上：`0.2.1-rc.5` 没有“把文本放进草稿框”的 Host 入口，`ctx.remote` 的转发 allowlist 是宿主编译期写死的，`host.call` 只发给动态（运行时求值）插件——静态 bundle 的工厂拿到的只有 `require`，见 `dsh-cordis-client-runner` 的 `guardedSurface`。所以这层只能在 DOM 上做，并且刻意做得很窄：
+   - 只认当前焦点元素和 `textarea` / `contenteditable`，命中不到就返回 `false`，动作变成「此操作在此处不可用」；
+   - 焦点在面板自己（`.cm-root`）里时一律不动，避免把按键打进自己的控件；
+   - 宿主改版导致选择器失效时是**功能降级**，不是崩溃。
+
+2. **自建 HTTP/SSE 通道**。同上：静态 bundle 没有 `host.call`，`ctx.remote` 只转发固定事件表，设备状态没有现成投影。于是客户端通过 `/codex-micro/{state,events,action}` 直连宿主半。写接口做了三道防护（`Sec-Fetch-Site` 非 same-origin 拒绝、无该头时校验 `Origin`/`X-Forwarded-Host`、只接受 `application/json`），并按 op 白名单执行；任意固件方法的转发**没有**暴露在这条通道上（面板从不调用它，只有模型工具走，且工具侧拦掉 bootloader/erase/reboot）。
+
+3. **没有 `export const Config`**。规范建议可调项走 `Config` 以便在 `cordis.patch.yml` 里改。本插件的可调项（亮度、自动熄屏、旋钮模式、摇杆开关…）是**运行时用户偏好**，在设置面板里改并立刻生效，不是部署配置；加 `Config` 需要 `@deepseek-ai/schemastery` 的 schema 对象，而这个包刻意保持零依赖——一旦解析不到，整个插件行激活失败，代价远大于收益。
+
+4. **绑定与偏好写在 `~/.dsh/codex-micro-bindings.json`**，而不是 `ctx.storageDomain`。宿主确实提供 `storageDomain`，但它要求 composition 里挂上 `storage` + 后端 + `storage-domain` 三行，desktop profile 不一定有；而这份数据在 `apply` 阶段就要同步读到（否则面板首帧是空的），一个可能缺席的异步服务换不掉一个原子写入的同步文件。文件本身做了三点保护：临时文件 + rename 的原子写、体积上限、读入时形状与版本校验（`version: 2`），坏文件按默认值重建而不是让插件启动失败。
 
 ### 文案是怎么组织的
 
@@ -138,7 +155,7 @@ npm test         # 断言三份副本一致、英文不含中文、占位符两�
 
 ```bash
 npm install          # 只为 test/ 装 react + react-dom，运行时没有依赖
-npm test             # 面板渲染 + 运行时 + 设备层 + 降级启动 + 字典一致性
+npm test             # 面板渲染 + 运行时 + 主题令牌 + 设备层 + 降级启动 + 字典一致性
 npm run test:host    # 真机：连接、落盘、灯光写固件、agent-slots、重置语义、移除设备
 ```
 
@@ -169,6 +186,7 @@ USERPROFILE=/tmp/cm-home npm run test:host
 - 宿主未暴露的命令（`git.*`、`toggleTerminal` 等）只会给出「此操作在此处不可用」，不会静默假装成功。
 - 按住说话依赖宿主的语音服务（`voice` / `remote.voice` / `dictation`）；没有时不录音，只提示。
 - 命令面板的 182 个原版 commandId 只接入能在 Harness 落地的那部分。
+- **浅色主题没有在真实浏览器里逐项目检过**。所有颜色都取自宿主令牌（`test/tokens.mjs` 守住），但对比度、间距、悬停态没有截图验证；这条不算通过，只是没有已知问题。
 
 ## License
 

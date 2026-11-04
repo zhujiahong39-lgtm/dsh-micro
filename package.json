@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-micro",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "DeepSeek Harness plugin for the Work Louder \"Codex Micro\" HID macro-pad: device control, agent-key lighting, session/approval bindings and a settings panel",
   "type": "module",
   "main": "lib/index.js",
@@ -60,7 +60,7 @@
     "url": "https://github.com/zhujiahong39-lgtm/dsh-plugin-micro"
   },
   "scripts": {
-    "test": "node test/client-smoke.mjs && node test/render-smoke.mjs && node test/bridge-smoke.cjs && node test/degraded-smoke.mjs",
+    "test": "node test/client-smoke.mjs && node test/render-smoke.mjs && node test/tokens.mjs && node test/bridge-smoke.cjs && node test/degraded-smoke.mjs",
     "test:host": "node test/run-host.mjs",
     "prepublishOnly": "npm test",
     "i18n": "node tools/i18n.mjs --write"

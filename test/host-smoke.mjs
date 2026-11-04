@@ -68,12 +68,23 @@ const ctx = {
 plugin.apply(ctx, { autoConnect: true });
 await sleep(2500);
 
-const call = (pathname, body) =>
+const call = (pathname, body, headers = {}) =>
   new Promise((resolve, reject) => {
     const handler = routes.get(pathname);
     if (!handler) return reject(new Error(`no route ${pathname}`));
     const req = {
       method: body === undefined ? 'GET' : 'POST',
+      // What the browser's own fetch sends: same-origin, JSON body. Tests that
+      // mean to be cross-site override these.
+      headers: body === undefined
+        ? {}
+        : {
+            host: '127.0.0.1:3080',
+            origin: 'http://127.0.0.1:3080',
+            'sec-fetch-site': 'same-origin',
+            'content-type': 'application/json',
+            ...headers,
+          },
       on(event, fn) {
         if (event === 'data' && body !== undefined) fn(Buffer.from(JSON.stringify(body)));
         if (event === 'end') fn();
@@ -164,6 +175,48 @@ assert.equal(reset.body.bindings.ACT06, 'FAST', 'reset must restore the layout')
 const unknown = await call('/codex-micro/action', { op: 'nope' });
 assert.equal(unknown.status, 400);
 
+// ---- the write route refuses cross-site callers -------------------------
+// These routes live on the Harness web server, so any page open in the same
+// browser can POST to them; only the reply is unreadable without CORS. Each
+// refusal is asserted on its own, and a same-origin JSON call still has to
+// reach the handler, so the guard cannot become a wall around the panel.
+const refused = { op: 'nope' };
+// An old client that predates Sec-Fetch-Site: Origin is all we have.
+assert.equal(
+  (await call('/codex-micro/action', refused, { origin: 'https://evil.example', 'sec-fetch-site': undefined })).status,
+  403,
+  'a foreign Origin must be refused',
+);
+assert.equal(
+  (await call('/codex-micro/action', refused, { 'sec-fetch-site': 'cross-site' })).status,
+  403,
+  'Sec-Fetch-Site: cross-site must be refused',
+);
+assert.equal(
+  (await call('/codex-micro/action', refused, { 'content-type': 'application/x-www-form-urlencoded' })).status,
+  403,
+  'a form content type must be refused: it would not preflight',
+);
+assert.equal(
+  (await call('/codex-micro/action', refused)).status,
+  400,
+  'a same-origin JSON request must still reach the handler',
+);
+
+// ---- arbitrary firmware methods are not reachable over HTTP -------------
+// The panel never called this op, so it was pure attack surface: an
+// unauthenticated relay from any same-origin script to the firmware.
+const httpRpc = await call('/codex-micro/action', { op: 'rpc', method: 'sys.version' });
+assert.equal(httpRpc.status, 400, 'op=rpc must not be served over HTTP');
+assert.match(String(httpRpc.body.error), /codex_micro tool/);
+
+// The model keeps the escape hatch, minus the irreversible methods.
+const blockedRpc = await tool.execute({ action: 'rpc', method: 'sys.bootloader' });
+assert.equal(blockedRpc.ok, false, 'the tool must refuse bootloader entry');
+assert.match(String(blockedRpc.message), /panel/);
+const allowedRpc = await tool.execute({ action: 'rpc', method: 'sys.version' });
+assert.equal(allowedRpc.ok, true, `read-only rpc was blocked: ${allowedRpc.message}`);
+
 // ---- remove device stops watching and stays disconnected ----------------
 const remove = await call('/codex-micro/action', { op: 'remove' });
 assert.equal(remove.body.settings.autoConnect, false);
@@ -246,6 +299,12 @@ const postRaw = (chunks) =>
     const req = {
       method: 'POST',
       destroyed: false,
+      headers: {
+        host: '127.0.0.1:3080',
+        origin: 'http://127.0.0.1:3080',
+        'sec-fetch-site': 'same-origin',
+        'content-type': 'application/json',
+      },
       on(event, fn) {
         listeners.set(event, fn);
         return req;

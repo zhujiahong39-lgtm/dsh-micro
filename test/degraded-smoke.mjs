@@ -81,6 +81,11 @@ const action = routes.get('/codex-micro/action');
 await new Promise((resolve, reject) => {
   const req = {
     method: 'POST',
+    headers: {
+      host: '127.0.0.1:3080',
+      'sec-fetch-site': 'same-origin',
+      'content-type': 'application/json',
+    },
     on(event, fn) {
       if (event === 'data') fn(Buffer.from(JSON.stringify({ op: 'retry' })));
       if (event === 'end') fn();
