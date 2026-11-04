@@ -198,12 +198,12 @@ console.error = (...args) => {
   realConsoleError(...args);
 };
 const html = renderToStaticMarkup(React.createElement(section));
-assert.ok(html.includes('Codex Micro'), 'panel title missing');
+assert.ok(html.includes('DSH Micro'), 'panel title missing');
 assert.ok(!html.includes('面板渲染失败'), 'boundary caught a render error');
 // The page owns the main column's scroll container, its padding and the top
 // strip: a bare body in `main` would overflow the frame instead of scrolling.
 assert.ok(html.includes('cm-page'), 'main-panel page wrapper missing');
-assert.ok(html.includes('aria-label="Codex Micro"'), 'page landmark lost its accessible name');
+assert.ok(html.includes('aria-label="DSH Micro"'), 'page landmark lost its accessible name');
 
 // ---- device layout ------------------------------------------------------
 // The surface is a 4x4 grid filled in DOM order, so a missing or extra cell
@@ -385,10 +385,10 @@ const ctxEn = {
 };
 
 moduleExports.apply(ctxEn);
-assert.ok(localeDicts.has('codex-micro:en'), 'english dictionary was not registered');
+assert.ok(localeDicts.has('dsh-micro:en'), 'english dictionary was not registered');
 
 const htmlEn = renderToStaticMarkup(React.createElement(section));
-for (const needle of ['Connection', 'Firmware', 'Battery', 'Codex Micro']) {
+for (const needle of ['Connection', 'Firmware', 'Battery', 'DSH Micro']) {
   assert.ok(htmlEn.includes(needle), `english panel missing: ${needle}`);
 }
 // Chat titles come from the user's data and stay as-is; everything else must be

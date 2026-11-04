@@ -1,7 +1,7 @@
 /**
  * Run the host smoke test against a throwaway HOME.
  *
- * `lib/index.js` resolves `~/.dsh/codex-micro-bindings.json` at module load, so
+ * `lib/index.js` resolves `~/.dsh/dsh-micro-bindings.json` at module load, so
  * the redirect has to happen before that module is evaluated — a static import
  * in the test file would already have run it. This wrapper sets the variables,
  * then imports the test dynamically.

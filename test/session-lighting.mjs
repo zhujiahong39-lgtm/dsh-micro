@@ -186,6 +186,19 @@ function harness({ slots, sessions, brightness = 100, selectionWindowMs = 20 }) 
   assert.equal(threads[2].c, 0, 'remaining slots off');
 }
 
+// Subagent sessions are delegated runs, not chats the user holds: they never
+// fill an agent key, and the renderer is told their ids so its pickers skip them.
+{
+  const sub = { ...session('sub', WORKING, 3), header: { createdAt: 3, origin: 'subagent' } };
+  const sessions = [session('main', IDLE, 1), sub];
+  const { lighting, calls } = harness({ slots: [null, null, null, null, null, null], sessions });
+  lighting.tick();
+  const threads = calls.threads.at(-1);
+  assert.equal(threads[0].c, STATUS_COLORS.idle, 'the main chat fills the slot');
+  assert.equal(threads[1].c, 0, 'the subagent run stays off even though it is newer');
+  assert.deepEqual(lighting.subagentIds(), ['sub'], 'the subagent id is reported to the renderer');
+}
+
 // Unchanged models are deduped; a fresh link forces one repaint.
 {
   const sessions = [session('s1', IDLE)];

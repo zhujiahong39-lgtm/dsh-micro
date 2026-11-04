@@ -74,7 +74,7 @@ const {
 {
   const yogo = { productId: 0x8298, product: 'Yogo Micro', manufacturer: 'ATK' };
   assert.equal(deviceTypeOf(yogo), 'codex_micro', 'the OAI unit is identified by its product name');
-  assert.equal(deviceTypeOf({ productId: 0x8360, product: 'Codex Micro' }), 'codex_micro');
+  assert.equal(deviceTypeOf({ productId: 0x8360, product: 'DSH Micro' }), 'codex_micro');
   assert.equal(deviceTypeOf({ productId: 0x8298, product: 'Creator Micro' }), 'creator_micro_v2');
   assert.equal(deviceTypeOf({ productId: 0x1234, product: 'Something' }), 'unknown');
 }
@@ -87,10 +87,10 @@ const {
     process: 'Harness.exe',
     path: 'C:\\Program Files\\Harness\\Harness.exe',
   });
-  assert.equal(focusAppPayload({ DSH_CODEX_MICRO_FOCUS_APP: 'Codex' }).appName, 'Codex');
+  assert.equal(focusAppPayload({ DSH_MICRO_FOCUS_APP: 'Codex' }).appName, 'Codex');
   assert.equal(focusAppDisabled({}), false);
   for (const off of ['off', '0', 'false', 'no']) {
-    assert.equal(focusAppDisabled({ DSH_CODEX_MICRO_FOCUS_APP: off }), true, `${off} disables the announce`);
+    assert.equal(focusAppDisabled({ DSH_MICRO_FOCUS_APP: off }), true, `${off} disables the announce`);
   }
 }
 

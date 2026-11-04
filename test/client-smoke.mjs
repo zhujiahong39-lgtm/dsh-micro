@@ -210,7 +210,7 @@ const panelRow = registered.get('sidebar.panellist');
 const panelPage = registered.get('main');
 assert.ok(panelRow, 'sidebar panel row was not registered');
 assert.ok(panelPage, 'main panel page was not registered');
-assert.equal(panelRow.options.id, 'codex-micro');
+assert.equal(panelRow.options.id, 'dsh-micro');
 assert.equal(panelPage.options.key, panelRow.options.id, 'the row id must address the main key');
 assert.equal(typeof panelRow.options.label, 'function', 'the row label must be a thunk so it follows the locale');
 assert.equal(typeof panelRow.options.order, 'number');
@@ -352,6 +352,33 @@ assert.equal(hintPushes, 1, 'scheduleLighting is debounced, not immediate');
 await sleep(80);
 assert.ok(hintPushes >= 2, 'the debounced push follows');
 delete ctrl.pushLightHints;
+
+// 2f. agent keys follow main conversations only: a subagent session is a
+//     delegated run, not a chat the user holds, so the pickers skip it. The host
+//     reports the authoritative ids; a self-describing entry is skipped too.
+const { mainSessionEntries } = moduleExports.__internals;
+assert.deepEqual(
+  mainSessionEntries(
+    [
+      { id: 'main', title: 'main', updatedAt: 30 },
+      { id: 'sub', title: 'sub', updatedAt: 20, origin: 'subagent' },
+      { id: 'deep', title: 'deep', updatedAt: 10, delegationDepth: 2 },
+    ],
+    [],
+  ).map((entry) => entry.id),
+  ['main'],
+  'subagent sessions are not offered as agent-key chats',
+);
+assert.deepEqual(
+  mainSessionEntries([{ id: 'reported', title: 'x', updatedAt: 1 }], ['reported']),
+  [],
+  'the host-reported subagent id is excluded',
+);
+ctrl.subagentIds = ['s2'];
+opened.length = 0;
+ctrl.openAgentSlot(1);
+assert.deepEqual(opened, ['s3'], `a slot skips the subagent chat: ${JSON.stringify(opened)}`);
+ctrl.subagentIds = [];
 
 // 3. split-mic off drops the second switch
 const dispatched = [];

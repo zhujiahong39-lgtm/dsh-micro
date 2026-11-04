@@ -96,12 +96,12 @@ async function normalPath() {
     assert.match(String(rpc[0].path), /HID#/, 'rpc device has no path');
     console.log(`  rpc interface: ${rpc[0].type} (${rpc[0].productId})`);
   } else {
-    console.log('  no Codex Micro attached — enumeration only');
+    console.log('  no DSH Micro attached — enumeration only');
   }
 }
 
 async function degradedPath() {
-  const { frames, code } = await runBridge({ DSH_CODEX_MICRO_HID: 'off' }, { shutdownAfterMs: 500 });
+  const { frames, code } = await runBridge({ DSH_MICRO_HID: 'off' }, { shutdownAfterMs: 500 });
   assert.equal(code, 0, 'a missing driver must not exit non-zero');
 
   const ready = frames.find((frame) => frame.t === 'ready');

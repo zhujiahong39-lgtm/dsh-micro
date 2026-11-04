@@ -74,14 +74,14 @@ for (const [key, pair] of Object.entries(STRINGS)) {
 
 const meta = {
   zh: {
-    title: "Codex Micro",
+    title: "DSH Micro",
     description:
-      "驱动 Work Louder Codex Micro 宏键盘：六个智能体键、旋钮、摇杆与逐键灯效，绑定到当前 Harness 会话。",
+      "驱动 DSH Micro 宏键盘（Work Louder Codex Micro）：六个智能体键、旋钮、摇杆与逐键灯效，绑定到当前 Harness 会话。",
   },
   en: {
-    title: "Codex Micro",
+    title: "DSH Micro",
     description:
-      "Drives a Work Louder Codex Micro macro-pad: six agent keys, encoder, joystick and per-key lighting, bound to this Harness session.",
+      "Drives a DSH Micro macro-pad (Work Louder Codex Micro): six agent keys, encoder, joystick and per-key lighting, bound to this Harness session.",
   },
 };
 

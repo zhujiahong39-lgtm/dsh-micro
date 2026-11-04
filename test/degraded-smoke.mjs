@@ -12,7 +12,7 @@
  *
  *   node test/degraded-smoke.mjs
  */
-process.env.DSH_CODEX_MICRO_HID = 'off';
+process.env.DSH_MICRO_HID = 'off';
 
 import assert from 'node:assert';
 import * as plugin from '../lib/index.js';
@@ -44,7 +44,7 @@ assert.doesNotThrow(() => plugin.apply(ctx, {}), 'apply threw with no HID runtim
 // The child reports, then exits; give it a moment, then read the state.
 await sleep(2500);
 
-const handler = routes.get('/codex-micro/state');
+const handler = routes.get('/dsh-micro/state');
 assert.ok(handler, 'state route was not registered');
 const body = await new Promise((resolve, reject) => {
   const res = {
@@ -77,7 +77,7 @@ const exits = (body.log ?? []).filter((line) => String(line).includes('bridge ex
 assert.ok(exits.length <= 1, `bridge appears to have restarted: ${exits.join(' | ')}`);
 
 // retry must be safe even when nothing can be started.
-const action = routes.get('/codex-micro/action');
+const action = routes.get('/dsh-micro/action');
 await new Promise((resolve, reject) => {
   const req = {
     method: 'POST',

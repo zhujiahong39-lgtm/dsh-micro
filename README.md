@@ -1,22 +1,22 @@
-# dsh-plugin-micro
+# dsh-micro
 
-DeepSeek Harness 插件：把 **Work Louder “Codex Micro” HID 小键盘**（agent 宏键盘）接成 Harness 的原生输入设备。
-面板按 OpenAI Codex 桌面版的 Codex Micro 页面复刻：布局、键帽编辑器、智能体键分配、摇杆/旋钮编辑器、官方中文文案。
-入口在**主页侧边栏**（全局面板行「Codex Micro」），面板在中间主区域打开，不再占用「设置」页。
+DeepSeek Harness 插件：把 **Work Louder「Codex Micro」HID 小键盘**（agent 宏键盘，本插件里称 **DSH Micro**）接成 Harness 的原生输入设备。
+面板按 OpenAI Codex 桌面版的原版 Codex Micro 页面复刻：布局、键帽编辑器、智能体键分配、摇杆/旋钮编辑器、官方中文文案。
+入口在**主页侧边栏**（全局面板行「DSH Micro」），面板在中间主区域打开，不再占用「设置」页。
 
 「布局」里的设备卡是按原版**逐值复刻**的，不是目测：表面是正方形 4×4 网格、上限 15rem（每格 51.5px 见方），旋钮占两向 92%、摇杆是带边框的凹槽内含 72% 圆点、触摸垫 58%——这些数字来自原版 `app.asar`（`webview/assets/async/623696.*.js`、`121882.*.js`）里的 Tailwind 类。智能体键帽底色恒定，状态色是叠在磨砂底上的一层半透明灯光（40%），紫点只标位置、不随状态变色。
 
-> 非官方项目，与 OpenAI、Work Louder 均无关联；HID 协议为独立实现，未包含任何第三方专有代码。
+> 非官方社区项目：与 DeepSeek、OpenAI、Work Louder 均无隶属或背书关系；Codex Micro / Work Louder / OpenAI 是其各自权利人的商标。HID 协议为独立实现，未包含任何第三方专有代码。
 
 ## 安装
 
 **不需要编译，不需要 `pnpm approve-builds`，不需要本机装 Node 工具链。**
 （设备桥是个 `node` 子进程，用的是宿主自己带的运行时；在 Electron 宿主里它由 `ELECTRON_RUN_AS_NODE=1` 拉起，见「已知偏离」。）
 
-在 Harness 里装（插件市场搜索 `dsh-plugin-micro`），或命令行：
+在 Harness 里装（插件市场搜索 `dsh-micro`），或命令行：
 
 ```bash
-dsh plugin --profile desktop add dsh-plugin-micro
+dsh plugin --profile desktop add dsh-micro
 ```
 
 安装完成后插件即可用：`cordis.patch.yml` 是纯 `insert`，市场会**热挂载**，无需重启整套 Harness。
@@ -45,13 +45,13 @@ dsh plugin --profile desktop add dsh-plugin-micro
 - **键帽编辑器**：草稿式编辑（点「保存」才落盘，取消零副作用）、同名键帽自动换位、`text:` 动作带文本框、搜索含动作名、空结果提示。
 - **灯光**：按原版 §4.6 的合成算法在**宿主半**完成（渲染端只上报宿主看不见的 UI 态：选中会话 / 未读 / 待审批 / 语音）。六键：选中或未读/待审批 → 呼吸，其余（含 working）→ 常亮，熄灭键发完整全 0 记录；色表与原版一致（working 蓝 `0x304FFE`、unread 绿 `0x00FF4C`、idle 白、awaiting 橙 `0xFF6D00`、error 红 `0xFF0033`）。氛围灯环只在「选中的 working 线程（蛇形）」「选中后 4 s 窗口」「语音态（录音海绿蛇形、处理白蛇形、完成白常亮）」亮；键帽背光只在选中 4 s 窗口内跟随选中色。亮度与自动调暗持久化，重连后自动重发，熄灯时 `rgbcfg` 与 `thstatus` 一起关。切换聊天会立刻重开这个 4 s 窗口（原版「切对话时的短暂动画」就是它，见 `.ref/notes/switch-animation.md`）：渲染端在切换动作里立即上报提示，能订阅到选中态时也订阅，1.5 s 轮询只作兜底。
 - **多窗口安全**：localStorage 租约 + BroadcastChannel 选举主控窗口，硬件输入只执行一次。
-- **模型工具 `codex_micro`**：智能体可查询设备、点灯、发 RPC。
-- **调试接口**：`/codex-micro/state`、`/codex-micro/diag`、`/codex-micro/events`（SSE）、`/codex-micro/action`。
+- **模型工具 `dsh_micro`**：智能体可查询设备、点灯、发 RPC。
+- **调试接口**：`/dsh-micro/state`、`/dsh-micro/diag`、`/dsh-micro/events`（SSE）、`/dsh-micro/action`。
 
 ## 使用
 
-1. 插上 Codex Micro，关闭其它占用 HID 的程序（键盘重映射工具等）。
-2. Harness 主页左侧边栏 →「Codex Micro」（面板在中间主区域打开，和 Plugins / Schedules 面板并列）。
+1. 插上 DSH Micro，关闭其它占用 HID 的程序（键盘重映射工具等）。
+2. Harness 主页左侧边栏 →「DSH Micro」（面板在中间主区域打开，和 Plugins / Schedules 面板并列）。
 3. 「布局」中：点键帽编辑；点智能体键分配聊天（需先切到「自定义分配」）；点摇杆/旋钮编辑手势；「重置布局」只恢复键帽，不动智能体键分配。
 4. 硬件按键触发对应动作；旋钮长按进设置页；智能体键单击打开/切换聊天（切换瞬间会重开原版的 4 s 选中高亮）。
 
@@ -66,7 +66,7 @@ dsh plugin --profile desktop add dsh-plugin-micro
 | 显示「已检测到」但点「连接」没反应 | 接口被别的程序占着（键盘重映射、厂商驱动、另一个 Harness 窗口）。先退出它们。 |
 | 点过「移除」后不再自动连 | 这是设计行为：移除会写入 `autoConnect: false` 并停止扫描，重启也不会自己连回来。点「连接」恢复。 |
 | 面板显示「已连接，功能受限」 | 设备连上了，但灯光 RPC 没通（固件版本差异）。按键照常工作。 |
-| 想看宿主这边的错误 | `%TEMP%/dsh-codex-micro.log`（Windows）或 `$TMPDIR/dsh-codex-micro.log`。 |
+| 想看宿主这边的错误 | `%TEMP%/dsh-micro.log`（Windows）或 `$TMPDIR/dsh-micro.log`。 |
 
 插件对宿主是**只增不减**的：`apply()` 全程有 try/catch，桥接进程崩溃有退避上限（连续 5 次快速退出后停止重试并上报状态），
 监听器与子进程都在 `ctx.effect` 的 disposer 里释放。任何一半出问题都不应该拖垮 Harness 的启动。
@@ -92,7 +92,7 @@ tools/           开发用工具：词条编译（`npm run i18n`）
 
 | 要求 | 本插件的做法 |
 |---|---|
-| `dsh.bundle.patch` + 唯一 entry id | `cordis.patch.yml` 是纯 `insert`（`id: codex-micro`），市场可热挂载；带 `config:` 的行只能重启生效 |
+| `dsh.bundle.patch` + 唯一 entry id | `cordis.patch.yml` 是纯 `insert`（`id: dsh-micro`），市场可热挂载；带 `config:` 的行只能重启生效 |
 | 显示元数据 | `locale/{en,zh}.json` 提供 `meta.title` / `meta.description`；`exports` 暴露 `./locale/*.json` 与 `./icon` |
 | 图标 | 原创 `icon.svg`（< 256 KiB），清单顶层 `icon` 字段指向它 |
 | `dsh.manifestVersion` | `1` |
@@ -101,7 +101,7 @@ tools/           开发用工具：词条编译（`npm run i18n`）
 | 不重复打包宿主 | `dependencies` 为空；宿主包只由 profile 提供。原生模块（node-hid）内联在 `lib/vendor/`，不触发 pnpm 的 `strictDepBuilds` |
 | 资源归 context 所有 | 宿主侧子进程 / 定时器 / HTTP 路由 / SSE 响应都在 `ctx.effect` 的 disposer 里释放；渲染端样式表同样注册为 effect |
 | 样式只用主题令牌 | 面板容器、文字、边框、控件读 `--dsw-alias-*`（经 `--cm-*` 间接映射，令牌缺失时有回退）；键帽、旋钮、摇杆、状态灯属于设备渲染，保留字面色。`test/tokens.mjs` 断言每个引用都在宿主主题真实定义的 349 个令牌里——写错一个名字时浏览器会静默丢属性，渲染测试抓不到 |
-| UI 文案走 locale 服务 | 全部 434 条文案（面板、按钮、状态、提示、手势说明、诊断日志）都经 `t()`；`ctx.locale.register("codex-micro", { en, zh })` 注册扁平字典，取不到服务时回退内置中文。渲染端无裸中文字面量，`npm test` 会断言 |
+| UI 文案走 locale 服务 | 全部 434 条文案（面板、按钮、状态、提示、手势说明、诊断日志）都经 `t()`；`ctx.locale.register("dsh-micro", { en, zh })` 注册扁平字典，取不到服务时回退内置中文。渲染端无裸中文字面量，`npm test` 会断言 |
 | 不替换应用根 | 面板注册进主页侧边栏的两个座位：`sidebar.panellist`（行图标）与 `main`（面板页），两侧用同一个 id 关联；toast 由 `ToastHost` 在 slot 内渲染，不向 `document.body` 追加节点 |
 | 不写组件外 DOM | **有例外**：composer 的文本插入 / 提交 / 滚动 / 导航要直接操作宿主输入区。这是规范明确不建议的做法，但没有可用替代，见「已知偏离」 |
 
@@ -114,11 +114,11 @@ tools/           开发用工具：词条编译（`npm run i18n`）
    - 焦点在面板自己（`.cm-root`）里时一律不动，避免把按键打进自己的控件；
    - 宿主改版导致选择器失效时是**功能降级**，不是崩溃。
 
-2. **自建 HTTP/SSE 通道**。同上：静态 bundle 没有 `host.call`，`ctx.remote` 只转发固定事件表，设备状态没有现成投影。于是客户端通过 `/codex-micro/{state,events,action}` 直连宿主半。写接口做了三道防护（`Sec-Fetch-Site` 非 same-origin 拒绝、无该头时校验 `Origin`/`X-Forwarded-Host`、只接受 `application/json`），并按 op 白名单执行；任意固件方法的转发**没有**暴露在这条通道上（面板从不调用它，只有模型工具走，且工具侧拦掉 bootloader/erase/reboot）。
+2. **自建 HTTP/SSE 通道**。同上：静态 bundle 没有 `host.call`，`ctx.remote` 只转发固定事件表，设备状态没有现成投影。于是客户端通过 `/dsh-micro/{state,events,action}` 直连宿主半。写接口做了三道防护（`Sec-Fetch-Site` 非 same-origin 拒绝、无该头时校验 `Origin`/`X-Forwarded-Host`、只接受 `application/json`），并按 op 白名单执行；任意固件方法的转发**没有**暴露在这条通道上（面板从不调用它，只有模型工具走，且工具侧拦掉 bootloader/erase/reboot）。
 
 3. **没有 `export const Config`**。规范建议可调项走 `Config` 以便在 `cordis.patch.yml` 里改。本插件的可调项（亮度、自动熄屏、旋钮模式、摇杆开关…）是**运行时用户偏好**，在设置面板里改并立刻生效，不是部署配置；加 `Config` 需要 `@deepseek-ai/schemastery` 的 schema 对象，而这个包刻意保持零依赖——一旦解析不到，整个插件行激活失败，代价远大于收益。
 
-4. **绑定与偏好写在 `~/.dsh/codex-micro-bindings.json`**，而不是 `ctx.storageDomain`。宿主确实提供 `storageDomain`，但它要求 composition 里挂上 `storage` + 后端 + `storage-domain` 三行，desktop profile 不一定有；而这份数据在 `apply` 阶段就要同步读到（否则面板首帧是空的），一个可能缺席的异步服务换不掉一个原子写入的同步文件。文件本身做了三点保护：临时文件 + rename 的原子写、体积上限、读入时形状与版本校验（`version: 2`），坏文件按默认值重建而不是让插件启动失败。
+4. **绑定与偏好写在 `~/.dsh/dsh-micro-bindings.json`**，而不是 `ctx.storageDomain`。宿主确实提供 `storageDomain`，但它要求 composition 里挂上 `storage` + 后端 + `storage-domain` 三行，desktop profile 不一定有；而这份数据在 `apply` 阶段就要同步读到（否则面板首帧是空的），一个可能缺席的异步服务换不掉一个原子写入的同步文件。文件本身做了三点保护：临时文件 + rename 的原子写、体积上限、读入时形状与版本校验（`version: 2`），坏文件按默认值重建而不是让插件启动失败。
 
 5. **协议是按行为观测独立重写的，不是拷贝原版代码**。HID 帧格式、私有 JSON-RPC 方言、`v.oai.thstatus`/`v.oai.rgbcfg` 的短键、`host.focused_app`、重连与 50 ms 冷却这些事实，来自对设备实际收发报文和 `app.asar` 里公开可见行为的观测；实现（`lib/bridge.cjs`、`lib/hid.cjs`）是本仓库自己的代码，MIT。原版 Work Louder device kit 是 `UNLICENSED` 专有包，**没有**被内联或复制；如果后续想换成官方包，需要对方授权，并且那份包不能随 MIT 仓库分发。
 
@@ -139,7 +139,7 @@ npm test         # 断言三份副本一致、英文不含中文、占位符两�
 
 有一类文案必须留在模块级常量里（键帽表、旋钮手势表）：它们在 `apply` 绑定 locale 之前就求值了，直接调 `t()` 会被永久冻结成导入时的语言。这些表存的是 key，由渲染处翻译。
 
-持久化文件：`~/.dsh/codex-micro-bindings.json`（原子写：先写 `.tmp` 再 rename；读入前校验体积与形状）
+持久化文件：`~/.dsh/dsh-micro-bindings.json`（原子写：先写 `.tmp` 再 rename；读入前校验体积与形状）
 
 ```jsonc
 {
@@ -167,7 +167,7 @@ npm run test:host    # 真机：连接、落盘、灯光写固件、agent-slots�
 ```
 
 `npm run test:host` 会先把 `HOME`/`USERPROFILE` 指向临时目录再启动，不会读写你真实的
-`~/.dsh/codex-micro-bindings.json`。直接用 `node test/host-smoke.mjs` 跑则会命中真实配置——
+`~/.dsh/dsh-micro-bindings.json`。直接用 `node test/host-smoke.mjs` 跑则会命中真实配置——
 "移除设备"那步会把 `autoConnect` 写成 `false`，之后每次启动都连不上，看起来像驱动坏了。
 
 `npm test` 全部在无设备的情况下也能跑（真在场时顺带验证枚举）。
@@ -177,13 +177,13 @@ npm run test:host    # 真机：连接、落盘、灯光写固件、agent-slots�
 USERPROFILE=/tmp/cm-home npm run test:host
 ```
 
-想验证「没有 HID 运行时」的降级路径：`DSH_CODEX_MICRO_HID=off node test/degraded-smoke.mjs`。
+想验证「没有 HID 运行时」的降级路径：`DSH_MICRO_HID=off node test/degraded-smoke.mjs`。
 
 ## 协议
 
 - 64 字节 HID 报文：`[0]=6, [1]=channel(2=RPC), [2]=len(≤61), [3..]=UTF-8 JSON`
 - JSON-RPC 私有方言：`{id, method, params}`，**没有** `jsonrpc` 字段，id 0–998，单飞 + 50 ms 冷却
-- 通知 `v.oai.hid`(k/act/ag)、`v.oai.rad`(a/d)；灯光 `v.oai.thstatus`、`v.oai.rgbcfg`；设备会反过来问前台应用 `host.focused_app`（`{appName,process,path}`，连接后立即上报并每 5 s 刷新，`DSH_CODEX_MICRO_FOCUS_APP=off` 可关闭，设为其它值可改应用名）
+- 通知 `v.oai.hid`(k/act/ag)、`v.oai.rad`(a/d)；灯光 `v.oai.thstatus`、`v.oai.rgbcfg`；设备会反过来问前台应用 `host.focused_app`（`{appName,process,path}`，连接后立即上报并每 5 s 刷新，`DSH_MICRO_FOCUS_APP=off` 可关闭，设为其它值可改应用名）
 - `device.status` → `version/profile_index/layer_index/battery/is_charging`
 
 `act`：`0` 松开、`1` 按下、`2` 重复（仅旋钮）。按键必须处理 `0`，否则无法实现长按、双击与按住说话。

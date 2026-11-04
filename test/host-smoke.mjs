@@ -8,7 +8,7 @@
  * degraded-boot paths that must never throw.
  *
  * HOME/USERPROFILE is redirected by the caller so the real
- * ~/.dsh/codex-micro-bindings.json is never touched.
+ * ~/.dsh/dsh-micro-bindings.json is never touched.
  *
  *   USERPROFILE=/tmp/cm-test npm run test:host
  */
@@ -111,15 +111,15 @@ const call = (pathname, body, headers = {}) =>
   });
 
 // ---- plugin surface -----------------------------------------------------
-assert.equal(plugin.name, 'codex-micro');
+assert.equal(plugin.name, 'dsh-micro');
 assert.deepEqual(plugin.inject, [], 'inject must stay empty: a missing service would stop the row from activating');
-assert.ok(routes.has('/codex-micro/state'), 'state route missing');
-assert.ok(routes.has('/codex-micro/action'), 'action route missing');
+assert.ok(routes.has('/dsh-micro/state'), 'state route missing');
+assert.ok(routes.has('/dsh-micro/action'), 'action route missing');
 
 // ---- tool definition ----------------------------------------------------
-assert.equal(tools.length, 1, 'codex_micro tool was not registered');
+assert.equal(tools.length, 1, 'dsh_micro tool was not registered');
 const tool = tools[0];
-assert.equal(tool.name, 'codex_micro');
+assert.equal(tool.name, 'dsh_micro');
 assert.equal(tool.parameters.type, 'object', 'parameters must be a JSON Schema object');
 assert.deepEqual(tool.parameters.required, ['action'], 'required must be a schema array, not per-property flags');
 assert.equal(tool.parameters.properties.action.type, 'string');
@@ -128,7 +128,7 @@ assert.equal(typeof tool.execute, 'function');
 assert.equal(typeof tool.output.render, 'function');
 
 // ---- device -------------------------------------------------------------
-const state = await call('/codex-micro/state');
+const state = await call('/dsh-micro/state');
 assert.equal(state.status, 200);
 console.log('  device:', JSON.stringify(state.body.deviceState));
 assert.equal(state.body.deviceState.driver, true, 'the bundled HID runtime did not load');
@@ -141,38 +141,38 @@ assert.equal(toolResult.ok, true, `tool status failed: ${toolResult.message}`);
 assert.match(toolResult.message, /connected/);
 
 // ---- settings are persisted (atomic write to the sandboxed home) --------
-const settings = await call('/codex-micro/action', { op: 'settings', brightness: 40, autoOff: '10-minutes', encoderMode: 'reasoning' });
+const settings = await call('/dsh-micro/action', { op: 'settings', brightness: 40, autoOff: '10-minutes', encoderMode: 'reasoning' });
 assert.equal(settings.status, 200);
 assert.equal(settings.body.settings.brightness, 40);
 assert.equal(settings.body.settings.autoOff, '10-minutes');
-const file = path.join(os.homedir(), '.dsh', 'codex-micro-bindings.json');
+const file = path.join(os.homedir(), '.dsh', 'dsh-micro-bindings.json');
 assert.ok(existsSync(file), `expected ${file} to exist`);
 const stored = JSON.parse(readFileSync(file, 'utf8'));
 assert.equal(stored.settings.brightness, 40, 'brightness not persisted');
 assert.equal(stored.version, 2);
 
 // ---- lighting writes reach the firmware ---------------------------------
-const light = await call('/codex-micro/action', {
+const light = await call('/dsh-micro/action', {
   op: 'light',
   threads: [{ id: 0, c: 0x304ffe, b: 1, e: 2, s: 0.4, sk: 0, sa: 0 }],
 });
 assert.equal(light.body.ok, true);
 
 // ---- bulk agent slots / bindings ----------------------------------------
-const slots = await call('/codex-micro/action', { op: 'agent-slots', slots: ['a', null, 'b', null, null, null] });
+const slots = await call('/dsh-micro/action', { op: 'agent-slots', slots: ['a', null, 'b', null, null, null] });
 assert.deepEqual(slots.body.agentSlots, ['a', null, 'b', null, null, null]);
 
-const bind = await call('/codex-micro/action', { op: 'bind-all', bindings: { ACT06: 'TERM', NOPE: 'x' } });
+const bind = await call('/dsh-micro/action', { op: 'bind-all', bindings: { ACT06: 'TERM', NOPE: 'x' } });
 assert.equal(bind.body.bindings.ACT06, 'TERM');
 assert.equal(bind.body.bindings.NOPE, undefined);
 
-await call('/codex-micro/action', { op: 'bind', key: 'AG00', action: 'command:toggleTerminal' });
-const reset = await call('/codex-micro/action', { op: 'reset-bindings' });
+await call('/dsh-micro/action', { op: 'bind', key: 'AG00', action: 'command:toggleTerminal' });
+const reset = await call('/dsh-micro/action', { op: 'reset-bindings' });
 assert.equal(reset.body.bindings.AG00, 'command:toggleTerminal', 'reset must not clobber agent keys');
 assert.equal(reset.body.bindings.ACT06, 'FAST', 'reset must restore the layout');
 
 // ---- unknown op is a 400, not a crash -----------------------------------
-const unknown = await call('/codex-micro/action', { op: 'nope' });
+const unknown = await call('/dsh-micro/action', { op: 'nope' });
 assert.equal(unknown.status, 400);
 
 // ---- the write route refuses cross-site callers -------------------------
@@ -183,22 +183,22 @@ assert.equal(unknown.status, 400);
 const refused = { op: 'nope' };
 // An old client that predates Sec-Fetch-Site: Origin is all we have.
 assert.equal(
-  (await call('/codex-micro/action', refused, { origin: 'https://evil.example', 'sec-fetch-site': undefined })).status,
+  (await call('/dsh-micro/action', refused, { origin: 'https://evil.example', 'sec-fetch-site': undefined })).status,
   403,
   'a foreign Origin must be refused',
 );
 assert.equal(
-  (await call('/codex-micro/action', refused, { 'sec-fetch-site': 'cross-site' })).status,
+  (await call('/dsh-micro/action', refused, { 'sec-fetch-site': 'cross-site' })).status,
   403,
   'Sec-Fetch-Site: cross-site must be refused',
 );
 assert.equal(
-  (await call('/codex-micro/action', refused, { 'content-type': 'application/x-www-form-urlencoded' })).status,
+  (await call('/dsh-micro/action', refused, { 'content-type': 'application/x-www-form-urlencoded' })).status,
   403,
   'a form content type must be refused: it would not preflight',
 );
 assert.equal(
-  (await call('/codex-micro/action', refused)).status,
+  (await call('/dsh-micro/action', refused)).status,
   400,
   'a same-origin JSON request must still reach the handler',
 );
@@ -206,9 +206,9 @@ assert.equal(
 // ---- arbitrary firmware methods are not reachable over HTTP -------------
 // The panel never called this op, so it was pure attack surface: an
 // unauthenticated relay from any same-origin script to the firmware.
-const httpRpc = await call('/codex-micro/action', { op: 'rpc', method: 'sys.version' });
+const httpRpc = await call('/dsh-micro/action', { op: 'rpc', method: 'sys.version' });
 assert.equal(httpRpc.status, 400, 'op=rpc must not be served over HTTP');
-assert.match(String(httpRpc.body.error), /codex_micro tool/);
+assert.match(String(httpRpc.body.error), /dsh_micro tool/);
 
 // The model keeps the escape hatch, minus the irreversible methods.
 const blockedRpc = await tool.execute({ action: 'rpc', method: 'sys.bootloader' });
@@ -218,16 +218,16 @@ const allowedRpc = await tool.execute({ action: 'rpc', method: 'sys.version' });
 assert.equal(allowedRpc.ok, true, `read-only rpc was blocked: ${allowedRpc.message}`);
 
 // ---- remove device stops watching and stays disconnected ----------------
-const remove = await call('/codex-micro/action', { op: 'remove' });
+const remove = await call('/dsh-micro/action', { op: 'remove' });
 assert.equal(remove.body.settings.autoConnect, false);
 await sleep(2600);
-const afterRemove = await call('/codex-micro/state');
+const afterRemove = await call('/dsh-micro/state');
 assert.equal(afterRemove.body.connected, false, 'device reconnected after remove');
 const storedAfter = JSON.parse(readFileSync(file, 'utf8'));
 assert.equal(storedAfter.settings.autoConnect, false, 'autoConnect=false was not persisted');
 
 // ---- retry clears the breaker -------------------------------------------
-const retry = await call('/codex-micro/action', { op: 'retry' });
+const retry = await call('/dsh-micro/action', { op: 'retry' });
 assert.equal(retry.body.ok, true);
 
 // ---- SSE teardown -------------------------------------------------------
@@ -254,7 +254,7 @@ const sseRes = {
     ended = true;
   },
 };
-routes.get('/codex-micro/events')(sseReq, sseRes);
+routes.get('/dsh-micro/events')(sseReq, sseRes);
 assert.ok(frames.some((frame) => frame.includes('"type":"hello"')), 'SSE should open with a hello frame');
 assert.equal(ended, false, 'SSE stream must stay open while the plugin is mounted');
 
@@ -293,7 +293,7 @@ console.log('  degraded apply: OK');
 // gives up on its own.
 const postRaw = (chunks) =>
   new Promise((resolve, reject) => {
-    const handler = routes.get('/codex-micro/action');
+    const handler = routes.get('/dsh-micro/action');
     if (!handler) return reject(new Error('no action route'));
     const listeners = new Map();
     const req = {
