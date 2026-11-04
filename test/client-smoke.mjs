@@ -587,7 +587,27 @@ assert.ok(
   'start() did not subscribe to the ownership lease',
 );
 assert.ok(broadcastChannels.length > 0, 'start() did not open the cross-window channel');
+
+// A selection observable (when the host exposes one) is an accelerator for the
+// 4 s selection highlight, and it must come off again in stop().
+let selectionSubscribed = 0;
+let selectionReleased = 0;
+const selectionStore = {
+  subscribe: () => {
+    selectionSubscribed += 1;
+    return () => {
+      selectionReleased += 1;
+    };
+  },
+};
+const previousGet = ctx.get;
+ctx.get = (name) => (name === 'uiSession' ? selectionStore : previousGet(name));
+assert.equal(ctrl.watchSelection(), true, 'watchSelection subscribes to an observable');
+assert.equal(selectionSubscribed, 1, 'the selection watch subscribed once');
+ctx.get = previousGet;
+
 ctrl.stop();
+assert.equal(selectionReleased, 1, 'stop() left the selection subscription attached');
 assert.equal(
   windowListeners.get('storage')?.size ?? 0,
   0,
