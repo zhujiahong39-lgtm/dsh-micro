@@ -148,6 +148,10 @@ const sandbox = {
   fetch: async () => ({ ok: true, json: async () => ({}) }),
   navigator: { clipboard: { writeText: async () => {} } },
   HTMLTextAreaElement: class {},
+  // Voice capture encodes the recording for the host speech Remote.
+  btoa: (text) => Buffer.from(text, "binary").toString("base64"),
+  atob: (text) => Buffer.from(text, "base64").toString("binary"),
+  AbortController,
 };
 sandbox.globalThis = sandbox;
 
@@ -432,6 +436,76 @@ ctrl.onKey({ k: 'ENC_CW', act: 1 });
 await sleep(60);
 assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`);
 
+// 6d. push-to-talk uses the DSH voice bundle: `remote.speech` with the 16 kHz
+//     WAV the official voice-input plugin sends. With the bundle off the press
+//     must not latch a recording and the user is told to turn it on.
+delete services['remote.speech'];
+let voicePress = ctrl.logs.length;
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(ctrl.ptt.state, 'idle', 'a press cannot start recording when the voice plugin is off');
+assert.ok(
+  ctrl.logs.slice(voicePress).some((line) => line.includes('语音输入插件未开启')),
+  `missing-plugin hint was not logged: ${ctrl.logs.slice(voicePress)}`,
+);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(30);
+assert.equal(ctrl.ptt.state, 'idle');
+
+// 6e. with the bundle on: press starts capture, release transcribes and inserts.
+const transcribeCalls = [];
+services['remote.speech'] = {
+  catalog: async () => ({
+    maxAudioBytes: 10_000_000,
+    maxDurationSeconds: 60,
+    selection: { providerId: 'sensevoice', language: 'auto' },
+    providers: [{ id: 'sensevoice', preparation: { phase: 'ready' } }],
+  }),
+  transcribe: async (request) => {
+    transcribeCalls.push(request);
+    return { ok: true, value: { text: '把这段话发出去', audioSeconds: 1.2, inferenceSeconds: 0.1 } };
+  },
+};
+const insertedTexts = [];
+ctrl.voiceCaptureFactory = () => ({
+  start: async () => {},
+  stop: async () => ({ bytes: new Uint8Array([82, 73, 70, 70]), seconds: 1.2 }),
+  dispose: async () => {},
+});
+ctrl.insertVoiceText = (text) => {
+  insertedTexts.push(text);
+  return true;
+};
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(ctrl.ptt.state, 'pressed');
+await sleep(20);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+assert.equal(ctrl.ptt.state, 'waiting', 'a short tap keeps the second-tap window open');
+await sleep(430);
+assert.equal(transcribeCalls.length, 1, `expected one transcription call: ${transcribeCalls.length}`);
+assert.equal(transcribeCalls[0].providerId, 'sensevoice', 'the selected provider must be forwarded');
+assert.equal(transcribeCalls[0].language, 'auto');
+assert.equal(typeof transcribeCalls[0].audioBase64, 'string');
+assert.ok(transcribeCalls[0].audioBase64.length > 0, 'the recording must be base64 encoded');
+assert.deepEqual(insertedTexts, ['把这段话发出去'], 'the transcript must land in the composer');
+assert.equal(ctrl.voiceState, 'completed', 'a finished transcript reports the completed voice state');
+
+// 6f. a failed transcription reports the error instead of inserting anything.
+transcribeCalls.length = 0;
+insertedTexts.length = 0;
+services['remote.speech'].transcribe = async () => ({ ok: false, error: { message: 'model not ready' } });
+ctrl.voiceState = 'idle';
+ctrl.onKey({ k: 'ACT10', act: 1 });
+await sleep(20);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(430);
+assert.equal(insertedTexts.length, 0, 'a failed transcription must not insert text');
+assert.equal(ctrl.voiceState, 'idle', 'a failed transcription returns to idle');
+assert.ok(
+  ctrl.logs.some((line) => line.includes('语音转写失败')),
+  'the transcription failure must be logged',
+);
+delete services['remote.speech'];
+
 // 7. push-to-talk follows the reference state machine (original-runtime.md §6.2)
 let voiceStarts = 0;
 let voiceStops = 0;
@@ -531,7 +605,7 @@ assert.equal(typeof hints.statuses, 'object', 'hints carry per-session unread/ap
 assert.equal(ctrl.scheduleLighting(), undefined, 'scheduleLighting debounces a hint push');
 
 console.log('client.js runtime test: OK');
-console.log('  agent single-tap switch + double-tap focus + action bindings, split mic, knob long/short/reasoning, ptt latch, joystick sectors, light hints');
+console.log('  agent single-tap switch + double-tap focus + action bindings, split mic, knob long/short/reasoning, ptt latch + voice via remote.speech, joystick sectors, light hints');
 
 // 10. the shipped locale JSON must equal the dictionary the bundle registers.
 // Plugin Manager reads the files for meta.title / meta.description while the
