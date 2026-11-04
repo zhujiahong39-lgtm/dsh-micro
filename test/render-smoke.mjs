@@ -292,6 +292,15 @@ const dot = rule('.cm-key .cap-dot');
 assert.ok(/width:12px/.test(dot) && /height:12px/.test(dot), `the violet dot must stay 12px, got: ${dot}`);
 assert.ok(!css.includes('.cap-dot[data-status'), 'the dot must not change colour with the session status');
 
+// The host styles plain elements with a blanket radius whose selector carries
+// more weight than a bare class, so `border-radius:999px` loses the cascade
+// there: the knob, the joystick puck and the touch pad came out as rounded
+// rectangles in the app while this preview showed circles. `!important` wins
+// the cascade back, and every round shape needs it.
+const roundShapes = (css.match(/border-radius:999px(?!!important)/g) ?? []).length;
+assert.equal(roundShapes, 0, `${roundShapes} round shapes lost their radius to the host's blanket rule`);
+assert.ok(css.includes('border-radius:999px!important'), 'the round shapes must force their radius');
+
 // Second pass: a connected snapshot (battery row, agent-key colours).
 windowStub.__CM_INITIAL_STATE__ = statePayload;
 const html2 = renderToStaticMarkup(React.createElement(section));
