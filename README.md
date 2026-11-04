@@ -1,7 +1,8 @@
 # dsh-plugin-micro
 
 DeepSeek Harness 插件：把 **Work Louder “Codex Micro” HID 小键盘**（agent 宏键盘）接成 Harness 的原生输入设备。
-设置面板按 OpenAI Codex 桌面版的 Codex Micro 页面复刻：布局、键帽编辑器、智能体键分配、摇杆/旋钮编辑器、官方中文文案。
+面板按 OpenAI Codex 桌面版的 Codex Micro 页面复刻：布局、键帽编辑器、智能体键分配、摇杆/旋钮编辑器、官方中文文案。
+入口在**主页侧边栏**（全局面板行「Codex Micro」），面板在中间主区域打开，不再占用「设置」页。
 
 > 非官方项目，与 OpenAI、Work Louder 均无关联；HID 协议为独立实现，未包含任何第三方专有代码。
 
@@ -37,10 +38,10 @@ dsh plugin --profile desktop add dsh-plugin-micro
 - **硬件映射**：6 个智能体键、8 个命令键、宽 MIC 键、摇杆四方向、旋钮旋转/单击/长按。
 - **旋钮四模式**：输入区导航（合成 `ComposerNavigation` / 方向键）、对话滚动（±160 px）、推理强度（顺时针降低、逆时针提高）、自定义（左右旋转/单击/长按四个手势独立绑定）；500 ms 长按在非自定义模式跳到设置页。
 - **摇杆**：四扇区几何、死区 0.1 / 触发阈值 0.5、边沿触发、有输入区时 220 ms 延迟防误触，可在设置里整体关闭。
-- **智能体键**：350 ms 双击打开聊天、`单击即切换` 开关、空绑定双击新建并绑定、一个聊天只占一个键、非自定义模式禁止逐键编辑。
+- **智能体键**：单击就打开/切换该聊天（聊天绑定）或立即执行（键帽/命令/技能绑定）；350 ms 内同键再按、或窗口不在前台时单击，才额外把窗口提到前台（`单击即切换` 开关打开后单击总是提窗）；空绑定单击新建会话并绑定、一个聊天只占一个键、非自定义模式禁止逐键编辑。
 - **按住说话**：350 ms 双击闩锁状态机（轻按开始、再按结束、长按按住说话）；宿主没有语音通道时明确提示。
 - **键帽编辑器**：草稿式编辑（点「保存」才落盘，取消零副作用）、同名键帽自动换位、`text:` 动作带文本框、搜索含动作名、空结果提示。
-- **灯光**：随会话状态实时刷新（工作中/未读/空闲/待审批/等待响应/错误/关闭），亮度与自动调暗持久化，重连后自动重发最近一次灯光模型，自动调暗同时关闭氛围灯。
+- **灯光**：按原版 §4.6 的合成算法在**宿主半**完成（渲染端只上报宿主看不见的 UI 态：选中会话 / 未读 / 待审批 / 语音）。六键：选中或未读/待审批 → 呼吸，其余（含 working）→ 常亮，熄灭键发完整全 0 记录；色表与原版一致（working 蓝 `0x304FFE`、unread 绿 `0x00FF4C`、idle 白、awaiting 橙 `0xFF6D00`、error 红 `0xFF0033`）。氛围灯环只在「选中的 working 线程（蛇形）」「选中后 4 s 窗口」「语音态（录音海绿蛇形、处理白蛇形、完成白常亮）」亮；键帽背光只在选中 4 s 窗口内跟随选中色。亮度与自动调暗持久化，重连后自动重发，熄灯时 `rgbcfg` 与 `thstatus` 一起关。切换聊天会立刻重开这个 4 s 窗口（原版「切对话时的短暂动画」就是它，见 `.ref/notes/switch-animation.md`）：渲染端在切换动作里立即上报提示，能订阅到选中态时也订阅，1.5 s 轮询只作兜底。
 - **多窗口安全**：localStorage 租约 + BroadcastChannel 选举主控窗口，硬件输入只执行一次。
 - **模型工具 `codex_micro`**：智能体可查询设备、点灯、发 RPC。
 - **调试接口**：`/codex-micro/state`、`/codex-micro/diag`、`/codex-micro/events`（SSE）、`/codex-micro/action`。
@@ -48,9 +49,9 @@ dsh plugin --profile desktop add dsh-plugin-micro
 ## 使用
 
 1. 插上 Codex Micro，关闭其它占用 HID 的程序（键盘重映射工具等）。
-2. Harness →「设置 → Codex Micro」。
+2. Harness 主页左侧边栏 →「Codex Micro」（面板在中间主区域打开，和 Plugins / Schedules 面板并列）。
 3. 「布局」中：点键帽编辑；点智能体键分配聊天（需先切到「自定义分配」）；点摇杆/旋钮编辑手势；「重置布局」只恢复键帽，不动智能体键分配。
-4. 硬件按键触发对应动作；旋钮长按进设置页；智能体键双击打开聊天。
+4. 硬件按键触发对应动作；旋钮长按进设置页；智能体键单击打开/切换聊天（切换瞬间会重开原版的 4 s 选中高亮）。
 
 ![设置页](docs/settings.png)
 ![键帽编辑器](docs/editor.png)
@@ -71,11 +72,11 @@ dsh plugin --profile desktop add dsh-plugin-micro
 ## 目录结构
 
 ```
-lib/index.js     宿主插件：工具、HTTP 路由、持久化、灯光状态机、桥接进程管理
-lib/client.js    渲染端 bundle：设置面板 + 硬件事件 → 动作的运行时
+lib/index.js     宿主插件：工具、HTTP 路由、持久化、会话状态→灯效（SessionLighting）、桥接进程管理
+lib/client.js    渲染端 bundle：侧边栏入口 + 主区域面板 + 硬件事件 → 动作的运行时
 lib/bridge.cjs   HID 子进程：帧解析、请求队列、自动重连
 lib/hid.cjs      HID 运行时加载器：内置副本 → 用户自装副本 → 明确降级
-lib/vendor/      内联的 node-hid 运行时（MIT/BSD，见 NOTICE.md）
+lib/vendor/      内联的 node-hid 运行时（MIT/BSD，见 NOTICE.md）；HID 传输与 JSON-RPC 方言是本仓库自己的独立实现，不含任何第三方专有代码
 locale/          插件清单文案 + 面板文案字典（meta.title / meta.description + 434 条词条），en + zh
 icon.svg         插件列表与设置页的图标
 cordis.patch.yml bundle 叠加层（纯 insert，可热挂载）
@@ -99,12 +100,12 @@ tools/           开发用工具：词条编译（`npm run i18n`）
 | 资源归 context 所有 | 宿主侧子进程 / 定时器 / HTTP 路由 / SSE 响应都在 `ctx.effect` 的 disposer 里释放；渲染端样式表同样注册为 effect |
 | 样式只用主题令牌 | 面板容器、文字、边框、控件读 `--dsw-alias-*`（经 `--cm-*` 间接映射，令牌缺失时有回退）；键帽、旋钮、摇杆、状态灯属于设备渲染，保留字面色。`test/tokens.mjs` 断言每个引用都在宿主主题真实定义的 349 个令牌里——写错一个名字时浏览器会静默丢属性，渲染测试抓不到 |
 | UI 文案走 locale 服务 | 全部 434 条文案（面板、按钮、状态、提示、手势说明、诊断日志）都经 `t()`；`ctx.locale.register("codex-micro", { en, zh })` 注册扁平字典，取不到服务时回退内置中文。渲染端无裸中文字面量，`npm test` 会断言 |
-| 不替换应用根 | 面板只注册进 `settings.section`；toast 由 `ToastHost` 在 slot 内渲染，不向 `document.body` 追加节点 |
+| 不替换应用根 | 面板注册进主页侧边栏的两个座位：`sidebar.panellist`（行图标）与 `main`（面板页），两侧用同一个 id 关联；toast 由 `ToastHost` 在 slot 内渲染，不向 `document.body` 追加节点 |
 | 不写组件外 DOM | **有例外**：composer 的文本插入 / 提交 / 滚动 / 导航要直接操作宿主输入区。这是规范明确不建议的做法，但没有可用替代，见「已知偏离」 |
 
 ### 已知偏离（及其原因）
 
-官方 `cordis-plugin-development` 规范里有三条本插件做不到，都是**宿主没给入口**而不是图省事。写在这里，是为了让下一个维护者知道这是判断，不是疏忽：
+官方 `cordis-plugin-development` 规范里有几条本插件做不到（外加两条需要写明的判断），都是**宿主没给入口**或**许可/依赖代价**的问题，而不是图省事。写在这里，是为了让下一个维护者知道这是判断，不是疏忽：
 
 1. **操作宿主 composer**（`practices.md`：“Do not write DOM outside your component”）。键盘的文本插入、发送、滚动、输入区导航只能落在宿主输入框上：`0.2.1-rc.5` 没有“把文本放进草稿框”的 Host 入口，`ctx.remote` 的转发 allowlist 是宿主编译期写死的，`host.call` 只发给动态（运行时求值）插件——静态 bundle 的工厂拿到的只有 `require`，见 `dsh-cordis-client-runner` 的 `guardedSurface`。所以这层只能在 DOM 上做，并且刻意做得很窄：
    - 只认当前焦点元素和 `textarea` / `contenteditable`，命中不到就返回 `false`，动作变成「此操作在此处不可用」；
@@ -116,6 +117,10 @@ tools/           开发用工具：词条编译（`npm run i18n`）
 3. **没有 `export const Config`**。规范建议可调项走 `Config` 以便在 `cordis.patch.yml` 里改。本插件的可调项（亮度、自动熄屏、旋钮模式、摇杆开关…）是**运行时用户偏好**，在设置面板里改并立刻生效，不是部署配置；加 `Config` 需要 `@deepseek-ai/schemastery` 的 schema 对象，而这个包刻意保持零依赖——一旦解析不到，整个插件行激活失败，代价远大于收益。
 
 4. **绑定与偏好写在 `~/.dsh/codex-micro-bindings.json`**，而不是 `ctx.storageDomain`。宿主确实提供 `storageDomain`，但它要求 composition 里挂上 `storage` + 后端 + `storage-domain` 三行，desktop profile 不一定有；而这份数据在 `apply` 阶段就要同步读到（否则面板首帧是空的），一个可能缺席的异步服务换不掉一个原子写入的同步文件。文件本身做了三点保护：临时文件 + rename 的原子写、体积上限、读入时形状与版本校验（`version: 2`），坏文件按默认值重建而不是让插件启动失败。
+
+5. **协议是按行为观测独立重写的，不是拷贝原版代码**。HID 帧格式、私有 JSON-RPC 方言、`v.oai.thstatus`/`v.oai.rgbcfg` 的短键、`host.focused_app`、重连与 50 ms 冷却这些事实，来自对设备实际收发报文和 `app.asar` 里公开可见行为的观测；实现（`lib/bridge.cjs`、`lib/hid.cjs`）是本仓库自己的代码，MIT。原版 Work Louder device kit 是 `UNLICENSED` 专有包，**没有**被内联或复制；如果后续想换成官方包，需要对方授权，并且那份包不能随 MIT 仓库分发。
+
+6. **「提窗」只能请求，不能强制**。原版在主进程里 `showWindow({ stealFocus: true })`，是确定性的；渲染端只有 `window.focus()`，是否真的把窗口提到前台由 Electron/OS 决定（没有用户手势时可能被拒绝）。原版「窗口不在前台时单击就提窗」这一条按 `document.hasFocus()` 复现：页面失焦时单击会补一次 focus 请求，已经在前台时单击只切聊天——和原版主进程的判定一致。
 
 ### 文案是怎么组织的
 
@@ -155,7 +160,7 @@ npm test         # 断言三份副本一致、英文不含中文、占位符两�
 
 ```bash
 npm install          # 只为 test/ 装 react + react-dom，运行时没有依赖
-npm test             # 面板渲染 + 运行时 + 主题令牌 + 设备层 + 降级启动 + 字典一致性
+npm test             # 面板渲染 + 运行时 + 会话状态灯效模型 + 主题令牌 + 设备层 + 降级启动 + 字典一致性
 npm run test:host    # 真机：连接、落盘、灯光写固件、agent-slots、重置语义、移除设备
 ```
 
@@ -176,7 +181,7 @@ USERPROFILE=/tmp/cm-home npm run test:host
 
 - 64 字节 HID 报文：`[0]=6, [1]=channel(2=RPC), [2]=len(≤61), [3..]=UTF-8 JSON`
 - JSON-RPC 私有方言：`{id, method, params}`，**没有** `jsonrpc` 字段，id 0–998，单飞 + 50 ms 冷却
-- 通知 `v.oai.hid`(k/act/ag)、`v.oai.rad`(a/d)；灯光 `v.oai.thstatus`、`v.oai.rgbcfg`
+- 通知 `v.oai.hid`(k/act/ag)、`v.oai.rad`(a/d)；灯光 `v.oai.thstatus`、`v.oai.rgbcfg`；设备会反过来问前台应用 `host.focused_app`（`{appName,process,path}`，连接后立即上报并每 5 s 刷新，`DSH_CODEX_MICRO_FOCUS_APP=off` 可关闭，设为其它值可改应用名）
 - `device.status` → `version/profile_index/layer_index/battery/is_charging`
 
 `act`：`0` 松开、`1` 按下、`2` 重复（仅旋钮）。按键必须处理 `0`，否则无法实现长按、双击与按住说话。
@@ -190,4 +195,4 @@ USERPROFILE=/tmp/cm-home npm run test:host
 
 ## License
 
-MIT。内联的 node-hid 运行时为 MIT / BSD-3-Clause，见 `lib/vendor/NOTICE.md`。
+MIT。内联的 node-hid 运行时为 MIT / BSD-3-Clause，见 `lib/vendor/NOTICE.md`。HID 传输层与灯光协议是本仓库的独立实现，不含第三方专有代码。

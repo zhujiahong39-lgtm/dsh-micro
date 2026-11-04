@@ -180,8 +180,10 @@ assert.equal(actionFromReference({ type: 'custom-shortcut' }), 'noop');
 assert.deepEqual(parseAction('text::yolo:'), { type: 'text', value: ':yolo:' });
 assert.equal(actionLabel('command:git.commit'), 'Git 提交');
 
-// 3. apply() wires the settings section
-let section = null;
+// 3. apply() wires the home-sidebar panel: the sidebar row and the main-column
+//    page it selects must be registered under one shared id, and the settings
+//    section the plugin used to own must be gone.
+const registered = new Map();
 const effects = [];
 const ctx = {
   effect(fn, label) {
@@ -198,14 +200,21 @@ const ctx = {
       fn();
     },
     register(options, component) {
-      section = { options, component };
+      registered.set(options.name, { options, component });
       return () => {};
     },
   },
 };
 moduleExports.apply(ctx);
-assert.ok(section, 'settings section was not registered');
-assert.equal(section.options.id, 'codex-micro');
+const panelRow = registered.get('sidebar.panellist');
+const panelPage = registered.get('main');
+assert.ok(panelRow, 'sidebar panel row was not registered');
+assert.ok(panelPage, 'main panel page was not registered');
+assert.equal(panelRow.options.id, 'codex-micro');
+assert.equal(panelPage.options.key, panelRow.options.id, 'the row id must address the main key');
+assert.equal(typeof panelRow.options.label, 'function', 'the row label must be a thunk so it follows the locale');
+assert.equal(typeof panelRow.options.order, 'number');
+assert.ok(!registered.has('settings.section'), 'the panel must not register a settings section any more');
 
 console.log('client.js smoke test: OK');
 console.log('  keycaps:', moduleExports.__KEYCAPS.length, '| executable:', moduleExports.__KEYCAPS.filter((k) => k.action !== 'noop').length);
@@ -233,18 +242,116 @@ const services = {
 };
 ctx.get = (name) => services[name];
 
-// 1. double-tap an agent key opens exactly one chat
+// 1. a single press on a thread-bound agent key opens/switches that chat — the
+//    reference opens on act===1 and only uses the double tap to raise the
+//    window (original-settings.md §5.5).
+opened.length = 0;
 ctrl.onKey({ k: 'AG00', act: 1 });
 ctrl.onKey({ k: 'AG00', act: 0 });
-ctrl.onKey({ k: 'AG00', act: 1 });
-assert.deepEqual(opened, ['s1'], `agent double tap opened ${JSON.stringify(opened)}`);
+await sleep(20);
+assert.deepEqual(opened, ['s1'], `single press opened ${JSON.stringify(opened)}`);
 
-// 2. a single tap alone must not open anything
+// 2. a second press inside 350 ms must NOT re-open the same chat; it only asks
+//    for window focus (the OS decides).
 opened.length = 0;
+let focusCalls = 0;
+ctrl.focusWindow = () => {
+  focusCalls += 1;
+};
+ctrl.onKey({ k: 'AG00', act: 1 });
+await sleep(80);
+ctrl.onKey({ k: 'AG00', act: 0 });
+ctrl.onKey({ k: 'AG00', act: 1 });
+await sleep(20);
+assert.deepEqual(opened, ['s1'], `double press must not open twice: ${JSON.stringify(opened)}`);
+assert.equal(focusCalls, 1, 'the second press asks for window focus');
+await sleep(400);
+
+// 2b. singleTapAgentKeys only adds the focus request, never gates the switch.
+ctrl.settings.singleTapAgentKeys = true;
+opened.length = 0;
+focusCalls = 0;
 ctrl.onKey({ k: 'AG01', act: 1 });
 ctrl.onKey({ k: 'AG01', act: 0 });
-await sleep(420);
-assert.deepEqual(opened, [], 'single tap opened a chat without singleTapAgentKeys');
+await sleep(20);
+assert.deepEqual(opened, ['s2'], 'single tap still switches with singleTapAgentKeys on');
+assert.equal(focusCalls, 1, 'and it also asks for focus');
+ctrl.settings.singleTapAgentKeys = false;
+await sleep(400);
+
+// 2c. an agent key bound to an action is NOT a chat slot: the binding runs on
+//     press, with no open and no focus request (parity B4). Keycap ids resolve
+//     to their action; an empty binding stays a thread slot.
+const actionCalls = [];
+ctrl.dispatch = async (action) => {
+  actionCalls.push(action);
+};
+ctrl.bindings = { ...ctrl.bindings, AG02: 'command:forkThread' };
+opened.length = 0;
+focusCalls = 0;
+ctrl.onKey({ k: 'AG02', act: 1 });
+ctrl.onKey({ k: 'AG02', act: 0 });
+await sleep(20);
+assert.deepEqual(actionCalls, ['command:forkThread'], `action binding ran: ${actionCalls}`);
+assert.deepEqual(opened, [], 'an action binding must not open a chat');
+assert.equal(focusCalls, 0, 'an action binding must not ask for focus');
+
+actionCalls.length = 0;
+ctrl.bindings = { ...ctrl.bindings, AG02: 'SPLIT' };
+ctrl.onKey({ k: 'AG02', act: 1 });
+ctrl.onKey({ k: 'AG02', act: 0 });
+await sleep(20);
+assert.deepEqual(actionCalls, ['session.fork'], `a keycap id resolves to its action: ${actionCalls}`);
+
+actionCalls.length = 0;
+ctrl.bindings = { ...ctrl.bindings, AG02: '' };
+ctrl.onKey({ k: 'AG02', act: 1 });
+ctrl.onKey({ k: 'AG02', act: 0 });
+await sleep(20);
+assert.deepEqual(actionCalls, [], 'an empty binding is a thread slot, not an action');
+
+// 2d. the reference focuses on a single press when the window is not in front
+//     (openWindowForAgentTap -> showWindow); only an already-foreground window
+//     needs the double tap. The page's signal for that is document.hasFocus().
+opened.length = 0;
+focusCalls = 0;
+ctrl.pageHasFocus = () => false;
+ctrl.onKey({ k: 'AG00', act: 1 });
+ctrl.onKey({ k: 'AG00', act: 0 });
+await sleep(20);
+assert.deepEqual(opened, ['s1'], `unfocused page still switches chat: ${JSON.stringify(opened)}`);
+assert.equal(focusCalls, 1, 'an unfocused page is raised on the first press');
+await sleep(400);
+
+opened.length = 0;
+focusCalls = 0;
+ctrl.pageHasFocus = () => true;
+ctrl.onKey({ k: 'AG00', act: 1 });
+ctrl.onKey({ k: 'AG00', act: 0 });
+await sleep(20);
+assert.deepEqual(opened, ['s1'], 'a focused page switches chat');
+assert.equal(focusCalls, 0, 'a focused page is not raised on the first press');
+await sleep(400);
+delete ctrl.pageHasFocus;
+
+// 2e. switching a chat reports the selection right away: the reference reopens
+//     the 4 s selection highlight on the same frame, while the renderer only has
+//     hints to send — waiting for the 1.5 s poll would start the highlight after
+//     the user already switched (switch-animation.md).
+let hintPushes = 0;
+ctrl.pushLightHints = () => {
+  hintPushes += 1;
+  return Promise.resolve();
+};
+opened.length = 0;
+ctrl.openAgentSlot(0);
+assert.deepEqual(opened, ['s1'], `the slot opened its chat: ${JSON.stringify(opened)}`);
+assert.ok(hintPushes >= 1, 'opening a chat flushes the lighting hints');
+ctrl.scheduleLighting();
+assert.equal(hintPushes, 1, 'scheduleLighting is debounced, not immediate');
+await sleep(80);
+assert.ok(hintPushes >= 2, 'the debounced push follows');
+delete ctrl.pushLightHints;
 
 // 3. split-mic off drops the second switch
 const dispatched = [];
@@ -270,20 +377,35 @@ ctrl.onKey({ k: 'ENC', act: 0 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.new'], `short press click: ${dispatched}`);
 
-// 6. knob rotation in reasoning mode: clockwise lowers effort
+// 6. knob rotation in reasoning mode: clockwise lowers effort.
+//    The firmware reports one quadrature tick as act=2 (original-runtime.md §5).
 dispatched.length = 0;
 ctrl.settings.encoderMode = 'reasoning';
 ctrl.knob.lastPulseAt = 0;
-ctrl.onKey({ k: 'ENC_CW', act: 1 });
+ctrl.onKey({ k: 'ENC_CW', act: 2 });
 await sleep(10);
 assert.deepEqual(dispatched, ['effort.down'], `reasoning rotation: ${dispatched}`);
 dispatched.length = 0;
 ctrl.knob.lastPulseAt = 0;
-ctrl.onKey({ k: 'ENC_CC', act: 1 });
+ctrl.onKey({ k: 'ENC_CC', act: 2 });
 await sleep(10);
 assert.deepEqual(dispatched, ['effort.up'], `reasoning rotation (ccw): ${dispatched}`);
 
-// 7. push-to-talk: short tap latches, second tap stops
+// 6b. every tick is one action: fast rotation must not be merged away
+dispatched.length = 0;
+ctrl.onKey({ k: 'ENC_CW', act: 2 });
+ctrl.onKey({ k: 'ENC_CW', act: 2 });
+ctrl.onKey({ k: 'ENC_CW', act: 2 });
+await sleep(10);
+assert.deepEqual(dispatched, ['effort.down', 'effort.down', 'effort.down'], `three ticks: ${dispatched}`);
+
+// 6c. a press-style tick (act=1) still works on builds that report it that way
+dispatched.length = 0;
+ctrl.onKey({ k: 'ENC_CW', act: 1 });
+await sleep(60);
+assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`);
+
+// 7. push-to-talk follows the reference state machine (original-runtime.md §6.2)
 let voiceStarts = 0;
 let voiceStops = 0;
 ctrl.voiceStart = () => {
@@ -292,12 +414,51 @@ ctrl.voiceStart = () => {
 ctrl.voiceStop = () => {
   voiceStops += 1;
 };
+
+// 7a. one short tap: recording starts, and with no second tap it stops itself
+//     after the 350 ms window (it must NOT latch).
 ctrl.onKey({ k: 'ACT10', act: 1 });
 ctrl.onKey({ k: 'ACT10', act: 0 });
-assert.equal(ctrl.ptt.state, 'latched', `ptt state after short tap: ${ctrl.ptt.state}`);
+assert.equal(ctrl.ptt.state, 'waiting', `ptt after short tap: ${ctrl.ptt.state}`);
 assert.equal(voiceStarts, 1);
-ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(voiceStops, 0, 'a short tap must not stop immediately');
+await sleep(420);
 assert.equal(ctrl.ptt.state, 'idle');
+assert.equal(voiceStops, 1, 'the second-tap window closes and recording stops');
+
+// 7b. a second tap inside 350 ms latches hands-free
+voiceStarts = 0;
+voiceStops = 0;
+ctrl.onKey({ k: 'ACT10', act: 1 });
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(80);
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(ctrl.ptt.state, 'latched', `ptt after double tap: ${ctrl.ptt.state}`);
+assert.equal(voiceStarts, 1, 'latching must not restart recording');
+assert.equal(voiceStops, 0, 'latching must not stop recording');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(420);
+assert.equal(ctrl.ptt.state, 'latched', 'latched survives the release');
+
+// 7c. pressing again stops, then swallows presses for 350 ms
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(ctrl.ptt.state, 'suppressing', `ptt while stopping: ${ctrl.ptt.state}`);
+assert.equal(voiceStops, 1);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(ctrl.ptt.state, 'suppressing', 'presses inside the suppress window are swallowed');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(420);
+assert.equal(ctrl.ptt.state, 'idle');
+
+// 7d. holding >=350 ms is push-to-talk: stop on release
+voiceStarts = 0;
+voiceStops = 0;
+ctrl.onKey({ k: 'ACT10', act: 1 });
+await sleep(380);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+assert.equal(ctrl.ptt.state, 'idle');
+assert.equal(voiceStarts, 1);
 assert.equal(voiceStops, 1);
 
 // 8. joystick right maps to the STICK_RIGHT binding
@@ -308,15 +469,42 @@ ctrl.onStick({ d: 0.9, a: 0.0 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.next'], `joystick right: ${dispatched}`);
 
-// 9. lighting model reflects the six slots
-const model = ctrl.lightingModel();
-assert.equal(model.length, 6);
-assert.equal(model[0].c, 0x304ffe, 'working slot should be blue');
-assert.equal(model[1].c, 0x00ff4c, 'unread slot should be green');
-assert.equal(model[5].c, 0, 'empty slot should be off');
+// 8b. sector boundaries follow the reference (original-runtime.md §4.1):
+//     up = [.625,.875), down = [.125,.375) — this pair used to be swapped.
+dispatched.length = 0;
+ctrl.lastStick = 0;
+ctrl.onStick({ d: 0.9, a: 0.75 });
+await sleep(10);
+assert.deepEqual(dispatched, ['plan.toggle'], `joystick up: ${dispatched}`);
+dispatched.length = 0;
+ctrl.lastStick = 0;
+ctrl.onStick({ d: 0.9, a: 0.25 });
+await sleep(10);
+assert.deepEqual(dispatched, ['session.new'], `joystick down: ${dispatched}`);
+dispatched.length = 0;
+ctrl.lastStick = 0;
+ctrl.onStick({ d: 0.9, a: 0.5 });
+await sleep(10);
+assert.deepEqual(dispatched, ['session.prev'], `joystick left: ${dispatched}`);
+
+// 9. The Host half owns the LED synthesis (lib/index.js SessionLighting, §4.6);
+//    the renderer only reports the UI-only state it can see: the selected
+//    session, unread/approval, voice. It must never build or push a model —
+//    that is what left the keyboard dark before (its projection is empty until
+//    the panel mounts).
+assert.equal(typeof ctrl.lightingModel, 'undefined', 'the renderer must not build the LED model');
+assert.equal(typeof ctrl.pushLighting, 'undefined', 'the renderer must not push the LED model');
+assert.equal(typeof ctrl.lightHints, 'function', 'the renderer reports UI hints');
+assert.equal(typeof ctrl.pushLightHints, 'function');
+const hints = ctrl.lightHints();
+assert.ok(hints && typeof hints === 'object', 'lightHints returns a payload');
+assert.equal(typeof hints.voiceState, 'string', 'hints carry the voice state');
+assert.ok('selected' in hints, 'hints carry the selected session');
+assert.equal(typeof hints.statuses, 'object', 'hints carry per-session unread/approval status');
+assert.equal(ctrl.scheduleLighting(), undefined, 'scheduleLighting debounces a hint push');
 
 console.log('client.js runtime test: OK');
-console.log('  agent double-tap, split mic, knob long/short/reasoning, ptt latch, joystick, lighting');
+console.log('  agent single-tap switch + double-tap focus + action bindings, split mic, knob long/short/reasoning, ptt latch, joystick sectors, light hints');
 
 // 10. the shipped locale JSON must equal the dictionary the bundle registers.
 // Plugin Manager reads the files for meta.title / meta.description while the

@@ -22,6 +22,15 @@ function sliceRange(text, name) {
   const marker = `const ${name} = `;
   const at = text.indexOf(marker);
   if (at < 0) throw new Error(`${name} not found`);
+  // Start at the doc comment directly above the declaration when there is one:
+  // the generated block carries its own comment, so starting at the `const`
+  // line would stack another copy on every run.
+  let start = text.lastIndexOf("\n", at) + 1;
+  const before = text.slice(0, start).replace(/\s+$/, "");
+  if (before.endsWith("*/")) {
+    const open = before.lastIndexOf("/**");
+    if (open >= 0) start = before.lastIndexOf("\n", open) + 1;
+  }
   let depth = 0;
   let quote = null;
   for (let i = at + marker.length - 1; i < text.length; i += 1) {
@@ -40,7 +49,7 @@ function sliceRange(text, name) {
       depth -= 1;
       if (depth === 0) {
         const end = text[i + 1] === ";" ? i + 2 : i + 1;
-        return { start: text.lastIndexOf("\n", at) + 1, end };
+        return { start, end };
       }
     }
   }

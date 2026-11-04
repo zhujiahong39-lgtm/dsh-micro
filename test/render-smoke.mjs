@@ -175,12 +175,16 @@ const ctx = {
   slots: { inject(n, fn) { fn(); }, register: () => () => {} },
 };
 let section = null;
+const panels = new Map();
 ctx.slots.register = (options, component) => {
+  panels.set(options.name, component);
   section = component;
   return () => {};
 };
 moduleExports.apply(ctx);
-assert.ok(section, 'no section component registered');
+section = panels.get('main');
+assert.ok(section, 'no main panel registered');
+assert.ok(panels.has('sidebar.panellist'), 'no sidebar panel row registered');
 
 // react-dom/server does not run effects, which is exactly the first paint.
 // First paint has no /state yet, which is the state that used to throw (TDZ).
@@ -196,6 +200,51 @@ console.error = (...args) => {
 const html = renderToStaticMarkup(React.createElement(section));
 assert.ok(html.includes('Codex Micro'), 'panel title missing');
 assert.ok(!html.includes('面板渲染失败'), 'boundary caught a render error');
+// The page owns the main column's scroll container, its padding and the top
+// strip: a bare body in `main` would overflow the frame instead of scrolling.
+assert.ok(html.includes('cm-page'), 'main-panel page wrapper missing');
+assert.ok(html.includes('aria-label="Codex Micro"'), 'page landmark lost its accessible name');
+
+// ---- device layout ------------------------------------------------------
+// The surface is a 4x4 grid filled in DOM order, so a missing or extra cell
+// shifts the rest of the row instead of throwing. 0.3.1 dropped the touch
+// strip / LED cell from the bottom row and appended an invisible filler at the
+// end, which slid the wide MIC key under ACT06 and left a fake key at the right
+// edge. No render error, no failed assertion anywhere — only a positional check
+// like this one notices.
+assert.ok(html.includes('class="cm-touch"'), 'bottom row lost its touch strip and LED cell');
+assert.ok(!html.includes('cm-key-placeholder'), 'the invisible filler cell is back at the end of the grid');
+const surfaceAt = html.indexOf('class="cm-surface"');
+const touchAt = html.indexOf('class="cm-touch"');
+const micAt = html.indexOf('cm-key wide');
+assert.ok(surfaceAt >= 0, 'device surface missing from the page');
+assert.ok(touchAt > surfaceAt, 'touch strip must be inside the device surface');
+assert.ok(
+  micAt < 0 || touchAt < micAt,
+  'touch strip must come before the wide MIC key: it owns the first column of the bottom row',
+);
+// Full bottom row, in grid order: ACT09 ends the third row, then the touch
+// strip, the MIC key spanning two columns, and ACT12 in the last column.
+const row4 = [
+  html.indexOf('aria-label="ACT09'),
+  html.indexOf('class="cm-touch"'),
+  html.indexOf('cm-key wide'),
+  html.indexOf('aria-label="ACT12"'),
+];
+assert.ok(row4.every((at) => at > 0), `bottom row is incomplete: ${row4.join(',')}`);
+assert.deepEqual(
+  [...row4].sort((a, b) => a - b),
+  row4,
+  `bottom row is out of order: ${row4.join(',')}`,
+);
+
+// The sidebar row renders the icon as its direct child, so the component has to
+// return the svg itself at the edge the row asks for — a wrapper div would land
+// as a line box inside the row's glyph slot.
+const iconHtml = renderToStaticMarkup(React.createElement(panels.get('sidebar.panellist'), { size: 20, active: true }));
+assert.ok(iconHtml.startsWith('<svg'), `sidebar icon must render svg as its root, got: ${iconHtml.slice(0, 24)}`);
+assert.ok(iconHtml.includes('width="20"'), 'sidebar icon ignored the requested size');
+assert.ok(!iconHtml.includes('aria-label'), 'the sidebar row owns the accessible name, not the icon');
 for (const row of ['连接', '亮度', '自动调暗', '布局', '智能体按键', '旋钮', '麦克风键', '模拟摇杆']) {
   assert.ok(html.includes(row), `row missing: ${row}`);
 }
@@ -213,6 +262,14 @@ for (const needle of ['已连接', '96%', '0.7.8', 'USB']) {
 }
 assert.ok(!html2.includes('未检测到'), 'connected snapshot still shows the disconnected label');
 assert.ok(html2.includes('37adf') === false);
+
+// Assigned agent keys are backlit, empty ones stay dark. The fixture assigns
+// slots 0 and 2, so exactly two caps are lit. The automatic scope still fills
+// the empty slots with a preview chat, and that must not light them up.
+const litCaps = (html2.match(/data-assigned="true"/g) ?? []).length;
+const darkCaps = (html2.match(/data-assigned="false"/g) ?? []).length;
+assert.equal(litCaps, 2, `expected 2 lit agent keys (s1, s2), got ${litCaps}`);
+assert.equal(darkCaps, 4, `expected 4 dark agent keys, got ${darkCaps}`);
 
 // Third pass: the two dialogs I rewrote, opened through the debug hooks.
 windowStub.__CM_DEBUG_EDITOR__ = 'ACT06';
@@ -283,7 +340,7 @@ const ctxEn = {
       fn();
     },
     register(options, component) {
-      section = component;
+      if (options.name === 'main') section = component;
       return () => {};
     },
   },
