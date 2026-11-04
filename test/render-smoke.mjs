@@ -318,6 +318,50 @@ const darkCaps = (html2.match(/data-assigned="false"/g) ?? []).length;
 assert.equal(litCaps, 2, `expected 2 lit agent keys (s1, s2), got ${litCaps}`);
 assert.equal(darkCaps, 4, `expected 4 dark agent keys, got ${darkCaps}`);
 
+// ---- agent-key sources (reference settings §5.1) -------------------------
+// The dropdown must actually swap the six chats, not merely reorder a list:
+//   pinned   → only the pinned chats, in pin order
+//   priority → attention first (unread/waiting/working), then recency
+//   custom   → only the user's own picks; nothing is checked by default
+const previousGet = ctx.get;
+ctx.get = (name) => {
+  if (name === 'workspaces') {
+    return { list: { getSnapshot: () => ({ pinnedSessionIds: ['s2'] }) } };
+  }
+  return previousGet(name);
+};
+const renderWith = (patch) => {
+  windowStub.__CM_INITIAL_STATE__ = {
+    ...statePayload,
+    ...patch,
+    settings: { ...statePayload.settings, ...(patch.settings ?? {}) },
+  };
+  return renderToStaticMarkup(React.createElement(section));
+};
+const S1 = '修复登录流程';
+const S2 = '整理协议文档';
+
+// pinned: s1 is not pinned, so it must not appear at all.
+const htmlPinned = renderWith({ agentSlots: ['s2', null, null, null, null, null], settings: { agentSource: 'pinned' } });
+assert.ok(htmlPinned.includes(S2), 'pinned mode must show the pinned chat');
+assert.ok(!htmlPinned.includes(S1), 'pinned mode must not fall back to unpinned chats');
+
+// priority: s2 is unread, s1 is the current chat, so s2 comes first.
+const htmlPriority = renderWith({ agentSlots: ['s2', 's1', null, null, null, null], settings: { agentSource: 'priority' } });
+assert.ok(htmlPriority.indexOf(S2) < htmlPriority.indexOf(S1), 'priority mode must put the unread chat first');
+
+// custom: one pick lights one key; the other five stay dark and unassigned
+// (the automatic scopes fill them with preview chats, custom must not).
+const htmlCustom = renderWith({
+  agentSlots: ['s2', null, null, null, null, null],
+  customSlots: ['s2', null, null, null, null, null],
+  settings: { agentSource: 'custom' },
+});
+assert.equal((htmlCustom.match(/data-assigned="true"/g) ?? []).length, 1, 'custom mode lights only the picked key');
+assert.equal((htmlCustom.match(/data-assigned="false"/g) ?? []).length, 5, 'custom mode leaves the rest unchecked');
+assert.ok(htmlCustom.includes('未给智能体键 2'), 'custom mode must show the empty slot, not a preview chat');
+ctx.get = previousGet;
+
 // Third pass: the two dialogs I rewrote, opened through the debug hooks.
 windowStub.__CM_DEBUG_EDITOR__ = 'ACT06';
 const htmlEditor = renderToStaticMarkup(React.createElement(section));
