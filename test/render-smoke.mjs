@@ -393,6 +393,17 @@ for (const [label, markup] of [
   assert.ok(!leaked(markup), `raw message key leaked into ${label}: ${leaked(markup)}`);
 }
 
+// The built-in dictionaries follow <html lang>: DSH's locale plugin sets it on
+// every language switch, so the panel keeps following the user even when the
+// Host locale service is missing or its dictionary registration was rejected.
+const { builtinLocale } = moduleExports.__internals;
+documentStub.documentElement.lang = 'en';
+assert.equal(builtinLocale(), 'en', '<html lang="en"> must select the English dictionary');
+documentStub.documentElement.lang = 'zh-CN';
+assert.equal(builtinLocale(), 'zh', 'a Chinese document must select the Chinese dictionary');
+delete documentStub.documentElement.lang;
+assert.equal(builtinLocale(), 'zh', 'no document language falls back to Chinese');
+
 // Fourth pass: English. The Host locale service indexes the dictionary by key
 // and substitutes `{name}`; mimic that and render again. This is the check that
 // the whole migration exists for — copy the panel shows in a second language.
