@@ -1,4 +1,4 @@
-# dsh-micro
+# plugin-micro
 
 DeepSeek Harness 插件：把 **Work Louder “Codex Micro” HID 小键盘**（agent 宏键盘）接成 Harness 的原生输入设备。
 设置面板按 OpenAI Codex 桌面版的 Codex Micro 页面复刻：布局、键帽编辑器、智能体键分配、摇杆/旋钮编辑器、官方中文文案。
@@ -22,8 +22,8 @@ DeepSeek Harness 插件：把 **Work Louder “Codex Micro” HID 小键盘**（
 要求：DeepSeek Harness 桌面版、Node ≥ 20（Windows / macOS）。
 
 ```bash
-git clone https://github.com/zjhxxxx/dsh-micro.git
-cd dsh-micro
+git clone https://github.com/zjhxxxx/plugin-micro.git
+cd plugin-micro
 npm install
 ```
 
@@ -33,25 +33,25 @@ npm install
 
 ```json
 {
-  "dependencies": { "dsh-micro": "link:/absolute/path/to/dsh-micro" },
-  "dsh": { "profile": { "bundles": ["dsh-micro"] } }
+  "dependencies": { "plugin-micro": "link:/absolute/path/to/plugin-micro" },
+  "dsh": { "profile": { "bundles": ["plugin-micro"] } }
 }
 ```
 
-然后在 profile 目录执行 `npm install`（或把 `node_modules/dsh-micro` 做成指向本目录的 junction），重启 Harness。
+然后在 profile 目录执行 `npm install`（或把 `node_modules/plugin-micro` 做成指向本目录的 junction），重启 Harness。
 
 **B. 作为插件行** —— 在 profile 的 `cordis.patch.yml` 中 `insert` 一行（见仓库内 `cordis.patch.yml`）：
 
 ```yaml
 - insert:
-    - id: dsh-micro
-      name: dsh-micro
+    - id: plugin-micro
+      name: plugin-micro
       config: { autoConnect: true, brightness: 1, autoOffMs: 180000 }
 ```
 
 然后重启 Harness。
 
-> 命名：Harness 生态的第三方插件习惯使用 `dsh-plugin-<name>` 前缀；本仓库按作者要求使用 `dsh-micro`，如需严格遵循社区约定，只需把 `package.json` 的 `name` 与 `lib/client.js` 的 loader `id` 同步改为 `dsh-plugin-micro`（profile 里也同步）即可。
+> 命名：Harness 生态的第三方插件习惯使用 `dsh-plugin-<name>` 前缀；本仓库按作者要求使用 `plugin-micro`，如需严格遵循社区约定，只需把 `package.json` 的 `name` 与 `lib/client.js` 的 loader `id` 同步改为 `dsh-plugin-micro`（profile 里也同步）即可。
 
 ## 使用
 
