@@ -184,6 +184,15 @@ assert.ok(section, 'no section component registered');
 
 // react-dom/server does not run effects, which is exactly the first paint.
 // First paint has no /state yet, which is the state that used to throw (TDZ).
+// React reports bad prop usage through console.error. A key spread into props
+// still renders, but the dev build logs one warning per call site, and the
+// host's console does not belong to us — so collect and assert instead.
+const reactWarnings = [];
+const realConsoleError = console.error;
+console.error = (...args) => {
+  reactWarnings.push(args.map((value) => String(value)).join(' '));
+  realConsoleError(...args);
+};
 const html = renderToStaticMarkup(React.createElement(section));
 assert.ok(html.includes('Codex Micro'), 'panel title missing');
 assert.ok(!html.includes('面板渲染失败'), 'boundary caught a render error');
@@ -295,6 +304,9 @@ assert.ok(
   'english panel still contains Chinese copy',
 );
 assert.ok(!leaked(htmlEn), `raw message key leaked into english panel: ${leaked(htmlEn)}`);
+
+const keyWarnings = reactWarnings.filter((line) => /key[^\n]*(prop|spread)|spread[^\n]*key/i.test(line));
+assert.deepEqual(keyWarnings, [], `React key-in-props warning: ${keyWarnings[0] ?? ''}`);
 
 console.log('render smoke test: OK,', html.length, '/', html2.length, 'bytes of markup');
 console.log('  dialogs: keycap', htmlEditor.length, '| stick', htmlStick.length, '| agent', htmlAgent.length);
