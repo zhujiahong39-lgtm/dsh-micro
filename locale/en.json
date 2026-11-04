@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "title": "Codex Micro",
+    "description": "Drives a Work Louder Codex Micro macro-pad: six agent keys, encoder, joystick and per-key lighting, bound to this Harness session."
+  },
+  "panel": {
+    "title": "Codex Micro",
+    "device": "Device",
+    "keys": "Agent keys",
+    "lighting": "Lighting",
+    "actions": "Actions",
+    "diagnostics": "Diagnostics",
+    "driver": "Device driver",
+    "driverHint": "The built-in HID runtime did not load; reinstalling the plugin usually fixes it."
+  },
+  "state": {
+    "connected": "Connected",
+    "limited": "Connected, limited",
+    "disconnected": "Not connected",
+    "detected": "Detected",
+    "noDriver": "Driver unavailable",
+    "suspended": "Paused after repeated failures",
+    "error": "Connection error",
+    "absent": "Not detected",
+    "connecting": "Connecting…"
+  },
+  "action": {
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "remove": "Remove",
+    "retry": "Retry",
+    "refresh": "Refresh"
+  }
+}

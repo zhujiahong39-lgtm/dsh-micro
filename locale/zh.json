@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "title": "Codex Micro",
+    "description": "驱动 Work Louder Codex Micro 宏键盘：六个智能体键、旋钮、摇杆与逐键灯效，绑定到当前 Harness 会话。"
+  },
+  "panel": {
+    "title": "Codex Micro",
+    "device": "设备",
+    "keys": "智能体键",
+    "lighting": "灯效",
+    "actions": "操作",
+    "diagnostics": "诊断",
+    "driver": "设备驱动",
+    "driverHint": "内置的 HID 运行时未能加载；重装插件通常可以修复"
+  },
+  "state": {
+    "connected": "已连接",
+    "limited": "已连接，功能受限",
+    "disconnected": "未连接",
+    "detected": "已检测到",
+    "noDriver": "驱动不可用",
+    "suspended": "已暂停",
+    "error": "连接错误",
+    "absent": "未检测到",
+    "connecting": "正在连接…"
+  },
+  "action": {
+    "connect": "连接",
+    "disconnect": "断开",
+    "remove": "移除",
+    "retry": "重试",
+    "refresh": "刷新"
+  }
+}

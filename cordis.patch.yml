@@ -1,16 +1,22 @@
 # Package bundle layer for dsh-plugin-micro.
 #
-# `dsh plugin --profile <name> add dsh-plugin-micro` appends this package
-# to `dsh.profile.bundles`, and this insert is applied after the base bundles.
-# A user profile can still address the row by id to override its config:
+# `dsh plugin --profile <name> add dsh-plugin-micro` appends this package to
+# `dsh.profile.bundles`, and the insert below is applied after the base bundles.
+#
+# Deliberately a PURE insert (id + name, no `config:`). The market can hot-mount
+# a bundle whose patch is a plain insert list; a row carrying configuration is
+# only honoured on the next boot, which reads as "installed but nothing
+# happened". Every value this plugin needs has a default in lib/index.js
+# (`DEFAULTS`); a user who wants to override one adds the row to their own
+# profile patch instead:
 #
 #   - id: codex-micro
 #     name: dsh-plugin-micro
-#     config: { autoConnect: false, brightness: 0.6, autoOffMs: 600000 }
+#     config:
+#       autoConnect: false
+#
+# Panel preferences (brightness / auto-dim / encoder mode / agent source) live
+# in ~/.dsh/codex-micro-bindings.json, not here, so they survive upgrades.
 - insert:
     - id: codex-micro
       name: dsh-plugin-micro
-      config:
-        autoConnect: true
-        brightness: 1
-        autoOffMs: 180000

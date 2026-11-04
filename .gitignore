@@ -3,3 +3,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 .tmp/
+
+# reverse-engineering scratch: extracted Codex reference bundles + analysis notes
+.ref/
+.tools/
+*.tgz

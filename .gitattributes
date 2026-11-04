@@ -1,0 +1,15 @@
+# Line endings and binary safety.
+#
+# The vendored HID runtime ships prebuilt `.node` binaries. Git's `text=auto`
+# heuristics can decide a binary is text and rewrite its line endings on
+# checkout, after which `process.dlopen` fails and the plugin reports "driver
+# unavailable" on a machine where it installed perfectly. `binary` opts those
+# files out of every conversion and diff.
+*.node binary
+*.png binary
+*.jpg binary
+*.tgz binary
+
+# Everything else is stored with LF so the checked-out tree matches what the
+# tarball contains; Windows editors do not need CRLF for Node sources.
+* text=auto eol=lf

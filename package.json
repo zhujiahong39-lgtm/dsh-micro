@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-micro",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "DeepSeek Harness plugin for the Work Louder \"Codex Micro\" HID macro-pad: device control, agent-key lighting, session/approval bindings and a settings panel",
   "type": "module",
   "main": "lib/index.js",
@@ -11,23 +11,37 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
+  "icon": "icon.svg",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.3"
+  },
   "dsh": {
-    "client": {
-      "platform": "web",
-      "inject": []
+    "manifestVersion": 1,
+    "engines": {
+      "dsh": ">=0.2.1-rc.3"
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ]
     }
-  },
-  "dependencies": {
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "node-hid": "^3.4.0"
   },
   "files": [
     "lib",
+    "locale",
+    "icon.svg",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -41,11 +55,17 @@
     "macropad"
   ],
   "license": "MIT",
-  "engines": {
-    "node": ">=20"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/zhujiahong39-lgtm/dsh-plugin-micro"
+  },
+  "scripts": {
+    "test": "node test/client-smoke.mjs && node test/render-smoke.mjs && node test/bridge-smoke.cjs && node test/degraded-smoke.mjs",
+    "test:host": "node test/run-host.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "devDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }
