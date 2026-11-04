@@ -51,7 +51,7 @@ npm install
 
 然后重启 Harness。
 
-> 命名：Harness 生态的第三方插件习惯使用 `dsh-plugin-<name>` 前缀；本仓库按作者要求使用 `dsh-plugin-micro`，如需严格遵循社区约定，只需把 `package.json` 的 `name` 与 `lib/client.js` 的 loader `id` 同步改为 `dsh-dsh-plugin-micro`（profile 里也同步）即可。
+> 命名：遵循 Harness 第三方插件惯例 `dsh-plugin-<name>`，本包名为 `dsh-plugin-micro`。
 
 ## 使用
 
