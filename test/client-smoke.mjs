@@ -506,6 +506,42 @@ assert.ok(
 );
 delete services['remote.speech'];
 
+// 6g. with the official dictation button in the composer, the physical key must
+//     press *that button* — the capture animation, permission prompt, "识别中…"
+//     and insertion are all the official component's state machine.
+const previousSelector = documentStub.querySelector;
+let startClicks = 0;
+let stopClicks = 0;
+let activityPhase = null;
+const startButton = { disabled: false, click: () => { startClicks += 1; activityPhase = 'recording'; } };
+const stopButton = { disabled: false, click: () => { stopClicks += 1; activityPhase = 'transcribing'; } };
+const activityElement = { getAttribute: () => activityPhase };
+documentStub.querySelector = (selector) => {
+  if (typeof selector === 'string' && selector.startsWith('button[aria-label=')) {
+    if (selector.includes('开始录音') || selector.includes('Start recording')) return startButton;
+    if (selector.includes('停止并识别') || selector.includes('Stop and transcribe')) return stopButton;
+    return null;
+  }
+  if (selector === '[data-voice-activity]') return activityPhase === null ? null : activityElement;
+  return null;
+};
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(startClicks, 1, 'the physical key must click the official dictation button');
+assert.equal(ctrl.voiceState, 'recording', 'the device lighting follows the official recording phase');
+await sleep(20);
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(430);
+assert.equal(stopClicks, 1, 'release must click the official stop button');
+assert.equal(ctrl.voiceState, 'processing', 'the transcribing phase maps to the processing light');
+// The official flow finishes: its capture row disappears.
+activityPhase = null;
+await sleep(240);
+assert.equal(ctrl.voiceState, 'completed', 'a finished official recording reports completed');
+documentStub.querySelector = previousSelector;
+ctrl.stopVoiceUiWatch();
+
 // 7. push-to-talk follows the reference state machine (original-runtime.md §6.2)
 let voiceStarts = 0;
 let voiceStops = 0;
