@@ -234,6 +234,54 @@ try {
 }
 console.log('  degraded apply: OK');
 
+// ---- request body is bounded -------------------------------------------
+// A size cap alone is not enough: the reader has to stop appending and tear
+// the socket down, or an oversized upload still costs memory until the client
+// gives up on its own.
+const postRaw = (chunks) =>
+  new Promise((resolve, reject) => {
+    const handler = routes.get('/codex-micro/action');
+    if (!handler) return reject(new Error('no action route'));
+    const listeners = new Map();
+    const req = {
+      method: 'POST',
+      destroyed: false,
+      on(event, fn) {
+        listeners.set(event, fn);
+        return req;
+      },
+      destroy() {
+        req.destroyed = true;
+      },
+    };
+    const res = {
+      statusCode: 0,
+      writeHead(status) {
+        this.statusCode = status;
+      },
+      end(text) {
+        try {
+          resolve({ status: this.statusCode, body: JSON.parse(text), destroyed: req.destroyed });
+        } catch (error) {
+          reject(error);
+        }
+      },
+      write() {},
+    };
+    Promise.resolve(handler(req, res)).catch(reject);
+    for (const chunk of chunks) listeners.get('data')?.(chunk);
+    listeners.get('end')?.();
+  });
+
+const over = await postRaw([Buffer.alloc(1_100_000, 0x61)]);
+assert.equal(over.status, 400, 'oversized body was not refused');
+assert.match(String(over.body.error), /too large/);
+assert.equal(over.destroyed, true, 'oversized request was not destroyed, so reading continued');
+
+const badJson = await postRaw([Buffer.from('{ nope')]);
+assert.equal(badJson.status, 400, 'malformed JSON was not refused');
+console.log('  request body: oversized and malformed refused');
+
 console.log('host smoke test: OK');
 console.log('  routes:', [...routes.keys()].join(' '));
 console.log('  effects:', effects.join(' | '));

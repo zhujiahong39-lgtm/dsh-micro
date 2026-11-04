@@ -69,6 +69,10 @@ const jsx = (type, props) => ({ type, props });
 const runtime = { jsx, jsxs: jsx, Fragment: 'Fragment' };
 
 let registration = null;
+// Count what the controller attaches: disposal is only provable if the stub
+// remembers who subscribed, and `stop()` must leave nothing behind.
+const windowListeners = new Map();
+const broadcastChannels = [];
 const windowStub = {
   __ModuleLoader__: {
     load(options) {
@@ -76,8 +80,13 @@ const windowStub = {
     },
   },
   localStorage,
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(type, fn) {
+    if (!windowListeners.has(type)) windowListeners.set(type, new Set());
+    windowListeners.get(type).add(fn);
+  },
+  removeEventListener(type, fn) {
+    windowListeners.get(type)?.delete(fn);
+  },
   dispatchEvent: () => true,
   getComputedStyle: () => ({ overflowY: 'visible' }),
   scrollBy() {},
@@ -124,7 +133,18 @@ const sandbox = {
     }
   },
   EventSource: undefined,
-  BroadcastChannel: undefined,
+  BroadcastChannel: class BroadcastChannelStub {
+    constructor(name) {
+      this.name = name;
+      this.closed = false;
+      this.onmessage = null;
+      broadcastChannels.push(this);
+    }
+    postMessage() {}
+    close() {
+      this.closed = true;
+    }
+  },
   fetch: async () => ({ ok: true, json: async () => ({}) }),
   navigator: { clipboard: { writeText: async () => {} } },
   HTMLTextAreaElement: class {},
@@ -369,3 +389,24 @@ for (const match of source.matchAll(/\bt\(\s*"([^"]+)"\s*[,)]/g)) literalKeys.ad
 const undefinedKeys = [...literalKeys].filter((key) => !(key in bundleLocale.zh));
 assert.deepEqual(undefinedKeys, [], 't() references a key the dictionary does not define');
 console.log(`  all ${literalKeys.size} literal t() keys are defined`);
+
+// ------------------------------------------------------------- disposal
+// Everything start() attaches has to come off again in stop(). Neither the
+// ownership lease listener nor the BroadcastChannel is visible in the panel,
+// so a regression here would only show up as a slow leak across reloads.
+assert.ok(
+  (windowListeners.get('storage')?.size ?? 0) > 0,
+  'start() did not subscribe to the ownership lease',
+);
+assert.ok(broadcastChannels.length > 0, 'start() did not open the cross-window channel');
+ctrl.stop();
+assert.equal(
+  windowListeners.get('storage')?.size ?? 0,
+  0,
+  'stop() left the storage listener attached',
+);
+assert.ok(
+  broadcastChannels.every((channel) => channel.closed),
+  'stop() left a BroadcastChannel open',
+);
+console.log('  disposal: storage listener and channel released');
