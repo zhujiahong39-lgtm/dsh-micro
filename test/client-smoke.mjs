@@ -436,90 +436,52 @@ ctrl.onKey({ k: 'ENC_CW', act: 1 });
 await sleep(60);
 assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`);
 
-// 6d. push-to-talk uses the DSH voice bundle: `remote.speech` with the 16 kHz
-//     WAV the official voice-input plugin sends. With the bundle off the press
-//     must not latch a recording and the user is told to turn it on.
+// 6d. no official dictation button in the DOM and no voice bundle: the press
+//     must NOT latch a recording, and the plugin says which piece is missing.
 delete services['remote.speech'];
+const plainSelector = documentStub.querySelector;
 let voicePress = ctrl.logs.length;
 ctrl.onKey({ k: 'ACT10', act: 1 });
-assert.equal(ctrl.ptt.state, 'idle', 'a press cannot start recording when the voice plugin is off');
+assert.equal(ctrl.ptt.state, 'idle', 'a press cannot start recording without the voice plugin');
 assert.ok(
   ctrl.logs.slice(voicePress).some((line) => line.includes('语音输入插件未开启')),
   `missing-plugin hint was not logged: ${ctrl.logs.slice(voicePress)}`,
 );
 ctrl.onKey({ k: 'ACT10', act: 0 });
 await sleep(30);
-assert.equal(ctrl.ptt.state, 'idle');
 
-// 6e. with the bundle on: press starts capture, release transcribes and inserts.
-const transcribeCalls = [];
-services['remote.speech'] = {
-  catalog: async () => ({
-    maxAudioBytes: 10_000_000,
-    maxDurationSeconds: 60,
-    selection: { providerId: 'sensevoice', language: 'auto' },
-    providers: [{ id: 'sensevoice', preparation: { phase: 'ready' } }],
-  }),
-  transcribe: async (request) => {
-    transcribeCalls.push(request);
-    return { ok: true, value: { text: '把这段话发出去', audioSeconds: 1.2, inferenceSeconds: 0.1 } };
-  },
-};
-const insertedTexts = [];
-ctrl.voiceCaptureFactory = () => ({
-  start: async () => {},
-  stop: async () => ({ bytes: new Uint8Array([82, 73, 70, 70]), seconds: 1.2 }),
-  dispose: async () => {},
-});
-ctrl.insertVoiceText = (text) => {
-  insertedTexts.push(text);
-  return true;
-};
+// 6e. voice bundle on but the composer is not mounted: still no recording, and
+//     the hint points at the missing button instead of a missing plugin.
+services['remote.speech'] = { transcribe: async () => ({ ok: true, value: { text: '' } }) };
+voicePress = ctrl.logs.length;
 ctrl.onKey({ k: 'ACT10', act: 1 });
-assert.equal(ctrl.ptt.state, 'pressed');
-await sleep(20);
-ctrl.onKey({ k: 'ACT10', act: 0 });
-assert.equal(ctrl.ptt.state, 'waiting', 'a short tap keeps the second-tap window open');
-await sleep(430);
-assert.equal(transcribeCalls.length, 1, `expected one transcription call: ${transcribeCalls.length}`);
-assert.equal(transcribeCalls[0].providerId, 'sensevoice', 'the selected provider must be forwarded');
-assert.equal(transcribeCalls[0].language, 'auto');
-assert.equal(typeof transcribeCalls[0].audioBase64, 'string');
-assert.ok(transcribeCalls[0].audioBase64.length > 0, 'the recording must be base64 encoded');
-assert.deepEqual(insertedTexts, ['把这段话发出去'], 'the transcript must land in the composer');
-assert.equal(ctrl.voiceState, 'completed', 'a finished transcript reports the completed voice state');
-
-// 6f. a failed transcription reports the error instead of inserting anything.
-transcribeCalls.length = 0;
-insertedTexts.length = 0;
-services['remote.speech'].transcribe = async () => ({ ok: false, error: { message: 'model not ready' } });
-ctrl.voiceState = 'idle';
-ctrl.onKey({ k: 'ACT10', act: 1 });
-await sleep(20);
-ctrl.onKey({ k: 'ACT10', act: 0 });
-await sleep(430);
-assert.equal(insertedTexts.length, 0, 'a failed transcription must not insert text');
-assert.equal(ctrl.voiceState, 'idle', 'a failed transcription returns to idle');
+assert.equal(ctrl.ptt.state, 'idle', 'no button means no recording');
 assert.ok(
-  ctrl.logs.some((line) => line.includes('语音转写失败')),
-  'the transcription failure must be logged',
+  ctrl.logs.slice(voicePress).some((line) => line.includes('找不到听写按钮')),
+  `missing-button hint was not logged: ${ctrl.logs.slice(voicePress)}`,
 );
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(30);
 delete services['remote.speech'];
 
-// 6g. with the official dictation button in the composer, the physical key must
-//     press *that button* — the capture animation, permission prompt, "识别中…"
-//     and insertion are all the official component's state machine.
-const previousSelector = documentStub.querySelector;
+// 6f. with the official dictation button present, the physical key presses that
+//     button: the capture animation, permission prompt, "识别中…" and insertion
+//     are all the official component's state machine.
 let startClicks = 0;
 let stopClicks = 0;
+let retryClicks = 0;
 let activityPhase = null;
 const startButton = { disabled: false, click: () => { startClicks += 1; activityPhase = 'recording'; } };
 const stopButton = { disabled: false, click: () => { stopClicks += 1; activityPhase = 'transcribing'; } };
+const retryButton = { disabled: false, click: () => { retryClicks += 1; activityPhase = 'recording'; } };
+const cancelButton = { disabled: false, click: () => { activityPhase = null; } };
 const activityElement = { getAttribute: () => activityPhase };
 documentStub.querySelector = (selector) => {
   if (typeof selector === 'string' && selector.startsWith('button[aria-label=')) {
-    if (selector.includes('开始录音') || selector.includes('Start recording')) return startButton;
-    if (selector.includes('停止并识别') || selector.includes('Stop and transcribe')) return stopButton;
+    if (selector.includes('开始录音') || selector.includes('Start recording')) return activityPhase === null ? startButton : null;
+    if (selector.includes('停止并识别') || selector.includes('Stop and transcribe')) return activityPhase === 'recording' ? stopButton : null;
+    if (selector.includes('重新录音') || selector.includes('Record again')) return activityPhase === 'feedback' ? retryButton : null;
+    if (selector.includes('取消') || selector.includes('Cancel')) return cancelButton;
     return null;
   }
   if (selector === '[data-voice-activity]') return activityPhase === null ? null : activityElement;
@@ -535,11 +497,39 @@ ctrl.onKey({ k: 'ACT10', act: 0 });
 await sleep(430);
 assert.equal(stopClicks, 1, 'release must click the official stop button');
 assert.equal(ctrl.voiceState, 'processing', 'the transcribing phase maps to the processing light');
-// The official flow finishes: its capture row disappears.
 activityPhase = null;
 await sleep(240);
 assert.equal(ctrl.voiceState, 'completed', 'a finished official recording reports completed');
-documentStub.querySelector = previousSelector;
+ctrl.stopVoiceUiWatch();
+
+// 6g. the "not recognised / failed" feedback row must not cost an extra press:
+//     pressing the mic key again starts the next take directly (retry button).
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+activityPhase = 'feedback';
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(retryClicks, 1, 'a feedback row must resume recording in one press');
+assert.equal(activityPhase, 'recording', 'the resumed take is recording again');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(430);
+assert.equal(stopClicks, 2, 'the resumed take stops through the official stop button');
+activityPhase = null;
+await sleep(240);
+ctrl.stopVoiceUiWatch();
+
+// 6h. while the official component is transcribing, a press must not start a
+//     second recording (and must not interrupt the running one).
+startClicks = 0;
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+activityPhase = 'transcribing';
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(startClicks, 0, 'a transcribing session must not be replaced');
+assert.equal(ctrl.ptt.state, 'idle', 'the press is ignored while transcribing');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+activityPhase = null;
+await sleep(30);
+documentStub.querySelector = plainSelector;
 ctrl.stopVoiceUiWatch();
 
 // 7. push-to-talk follows the reference state machine (original-runtime.md §6.2)
@@ -641,7 +631,7 @@ assert.equal(typeof hints.statuses, 'object', 'hints carry per-session unread/ap
 assert.equal(ctrl.scheduleLighting(), undefined, 'scheduleLighting debounces a hint push');
 
 console.log('client.js runtime test: OK');
-console.log('  agent single-tap switch + double-tap focus + action bindings, split mic, knob long/short/reasoning, ptt latch + voice via remote.speech, joystick sectors, light hints');
+console.log('  agent single-tap switch + double-tap focus + action bindings, split mic, knob long/short/reasoning, ptt latch + official dictation button, joystick sectors, light hints');
 
 // 10. the shipped locale JSON must equal the dictionary the bundle registers.
 // Plugin Manager reads the files for meta.title / meta.description while the
