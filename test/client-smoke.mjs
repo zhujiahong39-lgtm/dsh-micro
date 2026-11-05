@@ -591,7 +591,6 @@ assert.equal(voiceStops, 1);
 // 8. joystick right maps to the STICK_RIGHT binding
 dispatched.length = 0;
 ctrl.lastStick = 0;
-ctrl.settings.joystickDisabled = false;
 ctrl.onStick({ d: 0.9, a: 0.0 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.next'], `joystick right: ${dispatched}`);

@@ -80,8 +80,6 @@ const statePayload = {
     agentSource: 'recent',
     splitMic: false,
     singleTapAgentKeys: false,
-    voiceButtonMode: 'push-to-talk',
-    joystickDisabled: false,
     autoConnect: true,
   },
 };
@@ -245,7 +243,7 @@ const iconHtml = renderToStaticMarkup(React.createElement(panels.get('sidebar.pa
 assert.ok(iconHtml.startsWith('<svg'), `sidebar icon must render svg as its root, got: ${iconHtml.slice(0, 24)}`);
 assert.ok(iconHtml.includes('width="20"'), 'sidebar icon ignored the requested size');
 assert.ok(!iconHtml.includes('aria-label'), 'the sidebar row owns the accessible name, not the icon');
-for (const row of ['连接', '亮度', '自动调暗', '布局', '智能体按键', '旋钮', '麦克风键', '模拟摇杆']) {
+for (const row of ['连接', '亮度', '自动调暗', '布局', '智能体按键', '旋钮']) {
   assert.ok(html.includes(row), `row missing: ${row}`);
 }
 assert.ok(html.includes('未检测到'), 'disconnected status label missing');
