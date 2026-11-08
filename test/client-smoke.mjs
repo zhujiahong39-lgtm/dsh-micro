@@ -779,6 +779,20 @@ for (const id of interactions.MINI_GAME_IDS) {
 	interactions.renderMiniGame(recording, state, id, { color: '#ededed', fontFamily: 'monospace', fontSize: 13 });
 	assert.ok(painted.length > 0, `${id} renderer painted nothing`);
 }
+// Onboarding tour animation: 12 s cycle with 3480/7440/11520 ms buckets.
+const onboarding = interactions.ONBOARDING;
+assert.equal(onboarding.agentRows.length, 6);
+assert.equal(onboarding.keycapRows.length, 6);
+assert.deepEqual(onboarding.buckets, [3480, 7440, 11520]);
+const frame0 = interactions.onboardingFrame(0);
+// 相位：智能体键 i*800ms、命令键 (r+1)*700ms；桶 = <3480:0 / <7440:1 / <11520:2 / else 0。
+assert.deepEqual(frame0.agentSlots.map((slot) => slot.status), ['working', 'unread', 'awaiting-approval', 'idle', 'working', 'working']);
+assert.deepEqual(frame0.actionKeycapIds, ['FAST', 'APPR', 'REJ', 'SPLIT', 'NEW', 'APPR']);
+const frameLater = interactions.onboardingFrame(7441);
+assert.equal(frameLater.agentSlots[0].status, 'error', 'second bucket maps to the third status');
+assert.equal(frameLater.actionKeycapIds[0], 'BUG', 'keycap row advances into the third bucket');
+const pausedFrame = interactions.onboardingFrame(-1);
+assert.deepEqual(pausedFrame, interactions.onboardingFrame(0), 'reduced motion freezes on the first frame');
 console.log('  interactions: HUD feedback, circling gesture, knob pulse, three game engines');
 
 // A selection observable (when the host exposes one) is an accelerator for the

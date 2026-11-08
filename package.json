@@ -1,6 +1,6 @@
 {
   "name": "dsh-micro",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "DeepSeek Harness plugin for the DSH Micro HID macro-pad (Work Louder \"Codex Micro\"): device control, agent-key lighting, session/approval bindings and a settings panel",
   "type": "module",
   "main": "lib/index.js",
