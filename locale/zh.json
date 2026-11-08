@@ -484,5 +484,8 @@
   "onboarding.settings": "设置",
   "onboarding.skip": "跳过",
   "onboarding.takeTour": "开始两步导览",
-  "onboarding.title": "欢迎使用 Codex Micro"
+  "onboarding.title": "欢迎使用 Codex Micro",
+  "device.transportBluetooth": "蓝牙",
+  "device.transportUsb": "USB",
+  "state.reconnected": "已重连"
 }

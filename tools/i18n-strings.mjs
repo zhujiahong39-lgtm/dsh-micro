@@ -482,4 +482,7 @@ export const STRINGS = {
 	"onboarding.skip": ["跳过", "Skip"],
 	"onboarding.takeTour": ["开始两步导览", "Take 2-step tour"],
 	"onboarding.title": ["欢迎使用 Codex Micro", "Welcome to Codex Micro"],
+	"device.transportBluetooth": ["蓝牙", "Bluetooth"],
+	"device.transportUsb": ["USB", "USB"],
+	"state.reconnected": ["已重连", "Reconnected"],
 };

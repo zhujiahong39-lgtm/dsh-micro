@@ -484,5 +484,8 @@
   "onboarding.settings": "Settings",
   "onboarding.skip": "Skip",
   "onboarding.takeTour": "Take 2-step tour",
-  "onboarding.title": "Welcome to Codex Micro"
+  "onboarding.title": "Welcome to Codex Micro",
+  "device.transportBluetooth": "Bluetooth",
+  "device.transportUsb": "USB",
+  "state.reconnected": "Reconnected"
 }
