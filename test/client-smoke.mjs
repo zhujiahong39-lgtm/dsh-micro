@@ -714,6 +714,73 @@ assert.ok(
 );
 assert.ok(broadcastChannels.length > 0, 'start() did not open the cross-window channel');
 
+// ------------------------------------------------- joystick HUD + mini-games
+const interactions = moduleExports.__interactions;
+assert.ok(interactions, 'interaction seam missing');
+assert.deepEqual([...interactions.MINI_GAME_IDS], ['brick-breaker', 'asteroids', 'snake']);
+
+const freshGesture = () => ({ accumulatedTurns: 0, direction: 0, lastAngle: null, lastAt: null, startedAt: null });
+ctrl.lastStick = 0;
+ctrl.game = null;
+ctrl.gameRearm = false;
+ctrl.gameGesture = freshGesture();
+ctrl.hud = interactions.JOYSTICK_FEEDBACK.initialFeedback();
+ctrl.onStick({ d: 0.3, a: 0 });
+assert.equal(ctrl.hud.visible, true, 'HUD shows while the stick leaves the deadzone');
+assert.equal(ctrl.hud.direction, 'right');
+assert.equal(ctrl.hud.status, 'tracking');
+ctrl.gameGesture = freshGesture();
+ctrl.lastStick = 0;
+ctrl.onStick({ d: 0.9, a: 0.75 });
+assert.equal(ctrl.hud.direction, 'up', 'HUD follows the sector');
+ctrl.onStick({ d: 0.02, a: 0 });
+assert.equal(ctrl.hud.visible, false, 'HUD hides when the stick returns to neutral');
+const triggered = interactions.JOYSTICK_FEEDBACK.nextFeedback(
+	interactions.JOYSTICK_FEEDBACK.initialFeedback(),
+	{ angle: 0.75, distance: 0.9 },
+	{ enabled: true, direction: 'up', mappingAction: 'plan.toggle', status: 'triggered', activeDirection: 'up', previousActiveDirection: null },
+);
+assert.equal(triggered.status, 'triggered', 'the trigger tick reports the dispatched status');
+assert.equal(triggered.direction, 'up');
+
+// Circling the stick (1.9 turns in <6 s) starts one of the three mini-games.
+ctrl.game = null;
+ctrl.gameRearm = false;
+ctrl.gameGesture = { accumulatedTurns: 0, direction: 0, lastAngle: null, lastAt: null, startedAt: null };
+for (let step = 1; step <= 140 && ctrl.game == null; step += 1) ctrl.onStick({ d: 0.9, a: (step * 0.02) % 1 });
+assert.ok(ctrl.game != null, 'circling activates a mini-game');
+assert.ok(interactions.MINI_GAME_IDS.includes(ctrl.game.id), `unknown game ${ctrl.game?.id}`);
+ctrl.stopMiniGame();
+assert.equal(ctrl.game, null);
+assert.equal(ctrl.gameRearm, true, 'stopping a game re-arms the gesture');
+
+// Knob pulses drive the ring/dot animation and clear themselves.
+ctrl.onEncoder('ENC_CW', 2);
+assert.equal(ctrl.knobAnim, 'clockwise', 'clockwise pulse lights the right dot');
+await sleep(260);
+assert.equal(ctrl.knobAnim, null, 'knob pulse clears after 220 ms');
+
+// Each engine runs a frame and paints at least one primitive.
+for (const id of interactions.MINI_GAME_IDS) {
+	const state = interactions.createMiniGameState(id, {
+		width: 640,
+		height: 192,
+		levelGlyphs: interactions.layoutLevelGlyphs('DSH MICRO'),
+	});
+	interactions.stepMiniGame(state, id, 1 / 60, { joystick: { angle: 0.25, distance: 0.6 }, fire: true });
+	const painted = [];
+	const recording = new Proxy(
+		{ measureText: () => ({ width: 8 }) },
+		{
+			get: (target, prop) => (prop in target ? target[prop] : (...args) => painted.push([String(prop), ...args])),
+			set: () => true,
+		},
+	);
+	interactions.renderMiniGame(recording, state, id, { color: '#ededed', fontFamily: 'monospace', fontSize: 13 });
+	assert.ok(painted.length > 0, `${id} renderer painted nothing`);
+}
+console.log('  interactions: HUD feedback, circling gesture, knob pulse, three game engines');
+
 // A selection observable (when the host exposes one) is an accelerator for the
 // 4 s selection highlight, and it must come off again in stop().
 let selectionSubscribed = 0;
