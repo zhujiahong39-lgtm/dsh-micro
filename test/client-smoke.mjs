@@ -616,6 +616,72 @@ assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`)
   ctrl.settings.encoderMode = 'reasoning';
 }
 
+// 6f. When a menu / listbox / dialog is open, rotation navigates the overlay
+//     (permission presets and the model picker portal their options to <body>),
+//     not the composer behind it. DSH menus implement ArrowUp/ArrowDown
+//     themselves, so we hand the key over after focusing the checked item.
+{
+  const focused = [];
+  const clicked = [];
+  const events = [];
+  const menuItem = (label, checked) => ({
+    nodeType: 1,
+    isConnected: true,
+    tagName: 'BUTTON',
+    role: 'menuitemradio',
+    attrs: { 'aria-checked': checked ? 'true' : 'false' },
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    },
+    setAttribute(name) {
+      this.attrs[name] = 'true';
+    },
+    removeAttribute(name) {
+      delete this.attrs[name];
+    },
+    getBoundingClientRect: () => ({ width: 120, height: 28 }),
+    closest: () => null,
+    scrollIntoView() {},
+    focus() {
+      focused.push(label);
+      documentStub.activeElement = this;
+    },
+    click() {
+      clicked.push(label);
+    },
+    dispatchEvent(event) {
+      events.push({ type: event.type, key: event.key });
+      return true;
+    },
+  });
+  const currentModel = menuItem('DeepSeek V4.1 Flash', true);
+  const otherModel = menuItem('DeepSeek V4.1 Pro', false);
+  const overlay = {
+    getBoundingClientRect: () => ({ width: 240, height: 120 }),
+    closest: () => null,
+    contains: (node) => node === currentModel || node === otherModel,
+    querySelectorAll: () => [currentModel, otherModel],
+  };
+  const savedQueryAll = documentStub.querySelectorAll;
+  const savedQuery = documentStub.querySelector;
+  const savedActive = documentStub.activeElement;
+  documentStub.querySelectorAll = (selector) => (String(selector).includes('[role="menu"]') ? [overlay] : []);
+  documentStub.querySelector = () => null;
+  documentStub.activeElement = null;
+  ctrl.settings.encoderMode = 'composer-navigation';
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.deepEqual(focused, ['DeepSeek V4.1 Flash'], `rotation enters the menu at the checked item: ${focused}`);
+  assert.equal(currentModel.attrs['data-cm-nav-focus'], 'true', 'the menu item gets the visible highlight');
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.equal(events.at(-1)?.key, 'ArrowUp', 'inside the menu the host arrow navigation is used');
+  ctrl.onKnobClick();
+  assert.deepEqual(clicked, ['DeepSeek V4.1 Flash'], `click activates the focused menu item: ${clicked}`);
+  documentStub.querySelectorAll = savedQueryAll;
+  documentStub.querySelector = savedQuery;
+  documentStub.activeElement = savedActive;
+  ctrl.settings.encoderMode = 'reasoning';
+}
+
 
 delete services['remote.speech'];
 const plainSelector = documentStub.querySelector;
