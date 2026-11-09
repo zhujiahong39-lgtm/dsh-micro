@@ -673,9 +673,12 @@ assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`)
   assert.deepEqual(focused, ['DeepSeek V4.1 Flash'], `rotation enters the menu at the checked item: ${focused}`);
   assert.equal(currentModel.attrs['data-cm-nav-focus'], 'true', 'the menu item gets the visible highlight');
   ctrl.onKey({ k: 'ENC_CW', act: 2 });
-  assert.equal(events.at(-1)?.key, 'ArrowUp', 'inside the menu the host arrow navigation is used');
+  assert.deepEqual(focused, ['DeepSeek V4.1 Flash', 'DeepSeek V4.1 Pro'], `rotation walks the plain menu itself: ${focused}`);
+  assert.equal(otherModel.attrs['data-cm-nav-focus'], 'true', 'the highlight follows the focused option');
+  assert.equal(currentModel.attrs['data-cm-nav-focus'], undefined, 'the old highlight is removed');
+  assert.deepEqual(events, [], 'a plain menu has no host arrow handling to hand the tick to');
   ctrl.onKnobClick();
-  assert.deepEqual(clicked, ['DeepSeek V4.1 Flash'], `click activates the focused menu item: ${clicked}`);
+  assert.deepEqual(clicked, ['DeepSeek V4.1 Pro'], `click activates the focused menu item: ${clicked}`);
   documentStub.querySelectorAll = savedQueryAll;
   documentStub.querySelector = savedQuery;
   documentStub.activeElement = savedActive;
