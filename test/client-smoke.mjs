@@ -1036,6 +1036,49 @@ assert.equal(frameLater.agentSlots[0].status, 'error', 'second bucket maps to th
 assert.equal(frameLater.actionKeycapIds[0], 'BUG', 'keycap row advances into the third bucket');
 const pausedFrame = interactions.onboardingFrame(-1);
 assert.deepEqual(pausedFrame, interactions.onboardingFrame(0), 'reduced motion freezes on the first frame');
+// 11a. The game band is real layout, not an overlay: it grows the composer seat
+//      and the conversation scroller follows to the new bottom (otherwise the
+//      last message would just be covered by the taller sticky composer).
+{
+  const seat = {
+    style: { paddingTop: '' },
+    attrs: {},
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    },
+    setAttribute(name, value) {
+      this.attrs[name] = value;
+    },
+    removeAttribute(name) {
+      delete this.attrs[name];
+    },
+  };
+  const scroller = { scrollHeight: 1000, clientHeight: 600, scrollTop: 400 };
+  // Growing the seat grows the scroll content, exactly like the host layout.
+  const originalSet = seat.setAttribute.bind(seat);
+  seat.setAttribute = (name, value) => {
+    originalSet(name, value);
+    if (name === 'data-cm-game-space' && value === '1') scroller.scrollHeight += 200;
+  };
+  const originalRemove = seat.removeAttribute.bind(seat);
+  seat.removeAttribute = (name) => {
+    const wasReserved = seat.attrs[name] === '1' || (name === 'data-cm-game-padding' && seat.attrs['data-cm-game-space'] === '1');
+    originalRemove(name);
+    if (wasReserved && name === 'data-cm-game-space') scroller.scrollHeight -= 200;
+  };
+  const savedQuery = documentStub.querySelector;
+  documentStub.querySelector = (selector) =>
+    selector === '[data-composer-seat]' ? seat : selector === '[data-conversation-scroll]' ? scroller : null;
+  interactions.setGameSpace(true);
+  assert.equal(seat.style.paddingTop, '200px', 'the composer seat grows by the game band');
+  assert.equal(scroller.scrollTop, 600, 'a reader at the bottom follows the new bottom: the text moves up');
+  scroller.scrollTop = 100; // the user scrolled up: do not yank them to the bottom
+  interactions.setGameSpace(false);
+  assert.equal(seat.style.paddingTop, '', 'the original padding is restored');
+  assert.equal(scroller.scrollTop, 100, 'a reader mid-history is left where they were');
+  documentStub.querySelector = savedQuery;
+}
+
 console.log('  interactions: HUD feedback, circling gesture, knob pulse, three game engines');
 
 // A selection observable (when the host exposes one) is an accelerator for the
