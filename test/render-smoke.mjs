@@ -501,8 +501,11 @@ assert.ok(!hudHtml.includes('cm-overlay-game'), 'no game surface before a game s
 
 ctrl.game = { id: 'snake', joystick: { angle: 0, distance: 0 }, fireRequested: false, startedAt: Date.now() };
 const gameHtml = renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay));
-assert.ok(gameHtml.includes('cm-game-card'), 'the mini-game was not rendered into the overlay');
+// Reference game surface: a bare canvas, no card/head/exit chrome.
+assert.ok(gameHtml.includes('cm-game-surface'), 'the mini-game surface was not rendered into the overlay');
 assert.ok(gameHtml.includes('cm-game-canvas'), 'the mini-game canvas is missing');
+assert.ok(!gameHtml.includes('cm-game-card'), 'the game surface must not add card chrome');
+assert.ok(!gameHtml.includes('cm-game-head'), 'the game surface must not add a header row');
 // Reference handler (`eu`) returns early while a game runs, so the stick HUD must
 // not be painted during gameplay.
 assert.ok(!gameHtml.includes('cm-overlay-hud'), 'the stick HUD must stay hidden while a mini-game runs');
