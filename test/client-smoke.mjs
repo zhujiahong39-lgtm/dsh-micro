@@ -682,6 +682,97 @@ assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`)
   ctrl.settings.encoderMode = 'reasoning';
 }
 
+// 6g. The model picker is a drilled pane with a search box: DSH moves its
+//     *highlighted row* (not focus) when ArrowUp/ArrowDown is pressed in the
+//     search input, and `aria-controls`/`aria-expanded` point at that whole
+//     popover root. Entering must land in the search box, otherwise rotation
+//     bounces between "current model" and the search field.
+{
+  const focused = [];
+  const events = [];
+  const makeItem = (label, checked) => ({
+    nodeType: 1,
+    isConnected: true,
+    tagName: 'BUTTON',
+    role: 'menuitemradio',
+    attrs: { 'aria-checked': checked ? 'true' : 'false' },
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    },
+    setAttribute(name) {
+      this.attrs[name] = 'true';
+    },
+    removeAttribute(name) {
+      delete this.attrs[name];
+    },
+    getBoundingClientRect: () => ({ width: 120, height: 28 }),
+    closest: () => null,
+    scrollIntoView() {},
+    focus() {
+      focused.push(label);
+      documentStub.activeElement = this;
+    },
+    click() {},
+    dispatchEvent(event) {
+      events.push({ type: event.type, key: event.key });
+      return true;
+    },
+  });
+  const currentModel = makeItem('DeepSeek V4.1 Flash', true);
+  const otherModel = makeItem('DeepSeek V4.1 Pro', false);
+  const search = {
+    nodeType: 1,
+    isConnected: true,
+    tagName: 'INPUT',
+    role: 'searchbox',
+    attrs: {},
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    },
+    setAttribute(name) {
+      this.attrs[name] = 'true';
+    },
+    removeAttribute(name) {
+      delete this.attrs[name];
+    },
+    getBoundingClientRect: () => ({ width: 200, height: 32 }),
+    closest: () => null,
+    scrollIntoView() {},
+    focus() {
+      focused.push('search');
+      documentStub.activeElement = this;
+    },
+    dispatchEvent(event) {
+      events.push({ type: event.type, key: event.key });
+      return true;
+    },
+  };
+  const overlay = {
+    getBoundingClientRect: () => ({ width: 240, height: 300 }),
+    closest: () => null,
+    contains: (node) => node === search || node === currentModel || node === otherModel,
+    querySelector: (selector) => (String(selector).includes('input') ? search : null),
+    querySelectorAll: () => [currentModel, otherModel],
+  };
+  const savedQueryAll = documentStub.querySelectorAll;
+  const savedQuery = documentStub.querySelector;
+  const savedActive = documentStub.activeElement;
+  documentStub.querySelectorAll = (selector) => (String(selector).includes('[role="menu"]') ? [overlay] : []);
+  documentStub.querySelector = () => null;
+  documentStub.activeElement = null;
+  ctrl.settings.encoderMode = 'composer-navigation';
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.deepEqual(focused, ['search'], `rotation enters the search box of a searchable menu: ${focused}`);
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.equal(events.at(-1)?.key, 'ArrowUp', 'the arrow key goes to the search box so the host moves its highlighted row');
+  ctrl.onKnobClick();
+  assert.equal(events.at(-1)?.key, 'Enter', 'click chooses the highlighted model from the search box');
+  documentStub.querySelectorAll = savedQueryAll;
+  documentStub.querySelector = savedQuery;
+  documentStub.activeElement = savedActive;
+  ctrl.settings.encoderMode = 'reasoning';
+}
+
 
 delete services['remote.speech'];
 const plainSelector = documentStub.querySelector;
