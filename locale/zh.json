@@ -435,6 +435,7 @@
   "voiceUi.retryLabel": "重新录音",
   "voiceUi.setupLabel": "打开语音输入引导",
   "toast.noComposer": "找不到可插入的输入框",
+  "toast.navNoComposer": "输入区导航需要先打开一个聊天窗口",
   "toast.noFastMode": "当前构建未暴露快速模式",
   "toast.noFilePicker": "当前界面没有文件选择器",
   "toast.noNewChat": "当前构建无法新建会话",

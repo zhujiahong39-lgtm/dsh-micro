@@ -571,9 +571,19 @@ assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`)
     label,
     disabled: false,
     readOnly: false,
-    getAttribute: () => null,
+    attrs: {},
+    getAttribute(name) {
+      return this.attrs[name] ?? null;
+    },
+    setAttribute(name) {
+      this.attrs[name] = 'true';
+    },
+    removeAttribute(name) {
+      delete this.attrs[name];
+    },
     getBoundingClientRect: () => ({ width: 24, height: 24 }),
     closest: () => null,
+    scrollIntoView() {},
     focus() {
       focused.push(label);
       documentStub.activeElement = this;
@@ -592,8 +602,11 @@ assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`)
   ctrl.settings.encoderMode = 'composer-navigation';
   ctrl.onKey({ k: 'ENC_CW', act: 2 });
   assert.deepEqual(focused, ['send'], `clockwise from no selection starts at the last control: ${focused}`);
+  assert.equal(second.attrs['data-cm-nav-focus'], 'true', 'the focused control gets the visible highlight');
   ctrl.onKey({ k: 'ENC_CW', act: 2 });
   assert.deepEqual(focused, ['send', 'model'], `clockwise moves back one control: ${focused}`);
+  assert.equal(first.attrs['data-cm-nav-focus'], 'true', 'the highlight moves with the focus');
+  assert.equal(second.attrs['data-cm-nav-focus'], undefined, 'the old highlight is removed');
   ctrl.onKey({ k: 'ENC_CC', act: 2 });
   assert.deepEqual(focused, ['send', 'model', 'send'], `counterclockwise moves forward: ${focused}`);
   ctrl.onKnobClick();

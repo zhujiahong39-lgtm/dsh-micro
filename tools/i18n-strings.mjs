@@ -432,6 +432,10 @@ export const STRINGS = {
 	"voiceUi.retryLabel": ["重新录音", "Record again"],
 	"voiceUi.setupLabel": ["打开语音输入引导", "Open voice input setup"],
 	"toast.noComposer": ["找不到可插入的输入框", "No composer found to insert into"],
+	"toast.navNoComposer": [
+		"输入区导航需要先打开一个聊天窗口",
+		"Composer navigation needs an open chat window",
+	],
 	"toast.noFastMode": ["当前构建未暴露快速模式", "This build does not expose fast mode"],
 	"toast.noFilePicker": ["当前界面没有文件选择器", "This view has no file picker"],
 	"toast.noNewChat": ["当前构建无法新建会话", "This build cannot start a new conversation"],

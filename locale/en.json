@@ -435,6 +435,7 @@
   "voiceUi.retryLabel": "Record again",
   "voiceUi.setupLabel": "Open voice input setup",
   "toast.noComposer": "No composer found to insert into",
+  "toast.navNoComposer": "Composer navigation needs an open chat window",
   "toast.noFastMode": "This build does not expose fast mode",
   "toast.noFilePicker": "This view has no file picker",
   "toast.noNewChat": "This build cannot start a new conversation",
