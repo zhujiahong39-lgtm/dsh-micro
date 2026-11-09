@@ -520,8 +520,90 @@ ctrl.onKey({ k: 'ENC_CW', act: 1 });
 await sleep(60);
 assert.deepEqual(dispatched, ['effort.down'], `press-style tick: ${dispatched}`);
 
-// 6d. no official dictation button in the DOM and no voice bundle: the press
-//     must NOT latch a recording, and the plugin says which piece is missing.
+// 6d. reasoning mode really steps the DSH model directory. The old code read
+//     `snapshot.reasoning.efforts`, a shape DSH never had, so it only logged
+//     "this build does not expose a reasoning catalog" and did nothing.
+{
+  const selected = [];
+  const catalog = {
+    reasoningFor: () => ({
+      defaultEffort: 'medium',
+      efforts: [
+        { id: 'low', name: 'Low' },
+        { id: 'medium', name: 'Medium' },
+        { id: 'high', name: 'High' },
+      ],
+    }),
+  };
+  let current = { provider: 'openai', model: 'gpt-5', reasoningEffort: 'medium' };
+  const directory = {
+    store: { getSnapshot: () => ({ current }) },
+    load: async () => {},
+    select: async (selection) => {
+      selected.push(selection);
+      current = { ...current, reasoningEffort: selection.reasoningEffort };
+      return { ok: true };
+    },
+  };
+  const previousGet = ctx.get;
+  ctx.get = (name) => (name === 'modelDirectories' ? { directoryFor: () => directory, catalog } : previousGet(name));
+  await ctrl.stepEffort('s1', 1);
+  assert.deepEqual(
+    selected,
+    [{ provider: 'openai', model: 'gpt-5', reasoningEffort: 'high' }],
+    `effort up should pick the next level: ${JSON.stringify(selected)}`,
+  );
+  await ctrl.stepEffort('s1', 1);
+  assert.equal(selected.at(-1).reasoningEffort, 'low', 'effort wraps around the catalog');
+  ctx.get = previousGet;
+}
+
+// 6e. composer-navigation moves focus between the composer's real controls: DSH
+//     has no `data-composer-navigation-target` protocol, so arrow keys alone only
+//     move the caret. The ring/dot pulse and the focus ring are the feedback.
+{
+  const focused = [];
+  const clicked = [];
+  const target = (label) => ({
+    nodeType: 1,
+    isConnected: true,
+    tagName: 'BUTTON',
+    label,
+    disabled: false,
+    readOnly: false,
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ width: 24, height: 24 }),
+    closest: () => null,
+    focus() {
+      focused.push(label);
+      documentStub.activeElement = this;
+    },
+    click() {
+      clicked.push(label);
+    },
+  });
+  const first = target('model');
+  const second = target('send');
+  const card = { querySelectorAll: () => [first, second] };
+  const savedQuery = documentStub.querySelector;
+  const savedActive = documentStub.activeElement;
+  documentStub.querySelector = (selector) => (selector === '[data-composer-card]' ? card : savedQuery(selector));
+  documentStub.activeElement = null;
+  ctrl.settings.encoderMode = 'composer-navigation';
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.deepEqual(focused, ['send'], `clockwise from no selection starts at the last control: ${focused}`);
+  ctrl.onKey({ k: 'ENC_CW', act: 2 });
+  assert.deepEqual(focused, ['send', 'model'], `clockwise moves back one control: ${focused}`);
+  ctrl.onKey({ k: 'ENC_CC', act: 2 });
+  assert.deepEqual(focused, ['send', 'model', 'send'], `counterclockwise moves forward: ${focused}`);
+  ctrl.onKnobClick();
+  assert.deepEqual(clicked, ['send'], `click activates the focused control: ${clicked}`);
+  documentStub.querySelector = savedQuery;
+  documentStub.activeElement = savedActive;
+  ctrl.settings.encoderMode = 'reasoning';
+}
+
+
 delete services['remote.speech'];
 const plainSelector = documentStub.querySelector;
 let voicePress = ctrl.logs.length;
