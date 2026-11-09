@@ -109,7 +109,7 @@ function harness({ slots, sessions, brightness = 100, selectionWindowMs = 20 }) 
     },
   };
   const lighting = new SessionLighting(ctx, bridge, { selectionWindowMs });
-  return { lighting, calls };
+  return { lighting, calls, bridge };
 }
 
 // The Host log gives working/error/idle; hints add the UI-only states.
@@ -120,8 +120,10 @@ function harness({ slots, sessions, brightness = 100, selectionWindowMs = 20 }) 
   const threads = calls.threads.at(-1);
   assert.equal(threads[0].e, EFFECT.solid, 'working is solid');
   assert.equal(threads[1].c, STATUS_COLORS.unread, 'the unread hint wins over idle');
-  assert.equal(threads[2].c, STATUS_COLORS['awaiting-approval'], 'the approval hint wins over the error status');
-  assert.equal(threads[2].e, EFFECT.breath, 'a pending approval pulses');
+  // Reference order is error > approval > input > working > unread: a turn that
+  // ended in an error stays red even if an approval hint is also around.
+  assert.equal(threads[2].c, STATUS_COLORS.error, 'error outranks the approval hint');
+  assert.equal(threads[2].e, EFFECT.solid, 'an unselected approval/error key is solid (no pulsing producer in the reference)');
   const config = calls.config.at(-1);
   assert.deepEqual(
     config.keys,
@@ -210,6 +212,133 @@ function harness({ slots, sessions, brightness = 100, selectionWindowMs = 20 }) 
   lighting.lastKey = ''; // what onConnected does after a replug
   lighting.tick();
   assert.equal(calls.threads.length, count + 1, 'a reconnect must repaint');
+}
+
+// A long turn keeps appending events after `turn/start`; folding a fixed tail
+// window used to read it as idle, which is why a working chat lit solid white.
+{
+  const filler = Array.from({ length: 300 }, (_, index) => ({ type: 'tool/call', data: { index } }));
+  const sessions = [session('s1', [...WORKING, ...filler])];
+  const { lighting, calls } = harness({ slots: ['s1', null, null, null, null, null], sessions });
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.working, 'a long active turn still reads working');
+  // Only appended events are folded on the next tick. The turn end happened
+  // while nobody was looking, so it turns unread (the reference unread flag).
+  sessions[0] = session('s1', [...WORKING, ...filler, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }]);
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.unread, 'a finished background turn is unread');
+  // Opening it clears that (selected + focused = read).
+  lighting.setHints({ selected: 's1', focused: true, statuses: {}, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.idle, 'opening the thread returns the key to idle');
+}
+
+// A pending `approval/asked` without `approval/decided` is the host-side
+// equivalent of the reference `attention.kind === "approval"` status.
+{
+  const asked = { type: 'approval/asked', data: { id: 'req-1', toolName: 'pwsh' } };
+  const sessions = [session('s1', [...WORKING, asked])];
+  const { lighting, calls } = harness({ slots: ['s1', null, null, null, null, null], sessions });
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS['awaiting-approval'], 'an open approval asks for attention');
+  // Nothing in the reference sets the `pulsing` field, so an unselected
+  // approval key is solid; only the selected key breathes.
+  assert.equal(calls.threads.at(-1)[0].e, EFFECT.solid, 'an unselected approval key is solid');
+  sessions[0] = session('s1', [...WORKING, asked, { type: 'approval/decided', data: { id: 'req-1', outcome: 'allow' } }]);
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.working, 'deciding it returns to the turn status');
+}
+
+// Reference `rQ`: the focused window clears `unread` on the selected thread.
+{
+  const sessions = [session('s1', IDLE), session('s2', IDLE)];
+  const { lighting, calls } = harness({ slots: ['s1', 's2', null, null, null, null], sessions });
+  lighting.setHints({ selected: 's1', focused: false, statuses: { s1: 'unread' }, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.unread, 'unread stays while the window is not focused');
+  lighting.setHints({ selected: 's1', focused: true, statuses: { s1: 'unread' }, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.idle, 'focused + selected unread shows idle');
+  assert.equal(calls.threads.at(-1)[0].e, EFFECT.breath, 'the selected key still breathes');
+  lighting.setHints({ selected: 's1', focused: true, statuses: { s2: 'unread' }, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[1].c, STATUS_COLORS.unread, 'another chat keeps its unread status');
+}
+
+// The 4 s countdown only runs while the control plane can take writes: a hint
+// that arrives before the link is up must not burn the window (reference
+// `updateLighting` gates on `initialLightingPending`/`controlPlaneStatus`).
+{
+  const sessions = [session('s1', IDLE)];
+  const { lighting, bridge } = harness({ slots: ['s1', null, null, null, null, null], sessions, selectionWindowMs: 30 });
+  bridge.connected = false;
+  lighting.setHints({ selected: 's1', statuses: {}, voiceState: 'idle' });
+  assert.equal(lighting.selectionVisible, true, 'the selection is recorded while offline');
+  assert.equal(lighting.selectionTimer, null, 'no countdown before the device is writable');
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert.equal(lighting.selectionVisible, true, 'the window did not burn away offline');
+  bridge.connected = true;
+  lighting.tick();
+  assert.ok(lighting.selectionTimer, 'the countdown starts once the link is writable');
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert.equal(lighting.selectionVisible, false, 'and closes after the window');
+}
+
+// Losing the link clears the open window; the same selection does not reopen it
+// on replug (reference keeps `selectedSlotId`, clears `selectionLightingVisible`).
+{
+  const sessions = [session('s1', IDLE)];
+  const { lighting, bridge } = harness({ slots: ['s1', null, null, null, null, null], sessions, selectionWindowMs: 30 });
+  lighting.setHints({ selected: 's1', statuses: {}, voiceState: 'idle' });
+  assert.equal(lighting.selectionVisible, true);
+  bridge.connected = false;
+  lighting.onDisconnected();
+  assert.equal(lighting.selectionVisible, false, 'link loss clears the window');
+  bridge.connected = true;
+  lighting.tick();
+  assert.equal(lighting.selectionVisible, false, 'the same selection does not reopen on replug');
+}
+
+// `unread` is synthesized from the log: a turn that ended after the user last
+// looked at the thread is unread; looking at it (selected + focused) clears it.
+{
+  const sessions = [session('s1', IDLE)];
+  const { lighting, calls } = harness({ slots: ['s1', null, null, null, null, null], sessions });
+  lighting.setHints({ selected: 's1', focused: true, statuses: {}, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.idle, 'a focused selected thread is read');
+  // The user switches away; a new turn finishes in the background.
+  lighting.setHints({ selected: null, focused: false, statuses: {}, voiceState: 'idle' });
+  sessions[0] = session('s1', [
+    ...IDLE,
+    { type: 'turn/start', data: { turn: 2 } },
+    { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } },
+  ]);
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.unread, 'a finished background turn is unread');
+  assert.equal(calls.threads.at(-1)[0].e, EFFECT.solid, 'unread is solid, like the reference');
+  // Opening it again (selected + focused) marks it read.
+  lighting.setHints({ selected: 's1', focused: true, statuses: {}, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.idle, 'opening the thread clears unread');
+}
+
+// Hints can accelerate a status the Host log has not seen yet: the renderer's
+// `uiSession.sessionStatus` reports `running` before turn/start is folded.
+{
+  const sessions = [session('s1', IDLE)];
+  const { lighting, calls, bridge } = harness({ slots: ['s1', null, null, null, null, null], sessions });
+  bridge.client = { at: Date.now() };
+  lighting.setHints({ selected: null, focused: false, statuses: { s1: 'working' }, voiceState: 'idle' });
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.working, 'the running hint turns the key working');
+}
+
+// The createdAt fallback only applies when no renderer ever reported slots: a
+// live renderer is the model owner, and a creation-order guess would disagree
+// with the labels on the keys.
+{
+  const sessions = [session('old', IDLE, 1), session('new', IDLE, 2)];
+  const { lighting, calls, bridge } = harness({ slots: [null, null, null, null, null, null], sessions });
+  bridge.client = { at: Date.now() };
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, 0, 'no createdAt guess while the renderer is live');
+  bridge.client = { at: Date.now() - 60_000 };
+  lighting.tick();
+  assert.equal(calls.threads.at(-1)[0].c, STATUS_COLORS.idle, 'stale renderer: fall back to the store');
 }
 
 console.log('session lighting test: OK');

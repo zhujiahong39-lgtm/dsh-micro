@@ -341,7 +341,7 @@
   "log.approvedHw": "已批准（硬件）",
   "log.commandUnavailable": "命令不可用：{command}",
   "log.effortEnum": "effort: 该构建未暴露推理档目录",
-  "log.emptyAgentKey": "智能体键 {slot} 为空，双击新建会话",
+  "log.emptyAgentKey": "智能体键 {slot} 为空",
   "log.knobLeft": "左旋",
   "log.knobRight": "右旋",
   "log.knobTurn": "旋钮{dir} → {action}",

@@ -341,7 +341,7 @@
   "log.approvedHw": "Approved (hardware)",
   "log.commandUnavailable": "Command unavailable: {command}",
   "log.effortEnum": "effort: this build does not expose a reasoning level catalog",
-  "log.emptyAgentKey": "Agent key {slot} is empty; double-tap starts a new chat",
+  "log.emptyAgentKey": "Agent key {slot} is empty",
   "log.knobLeft": "left",
   "log.knobRight": "right",
   "log.knobTurn": "Knob {dir} → {action}",

@@ -338,7 +338,7 @@ export const STRINGS = {
 	"log.approvedHw": ["已批准（硬件）", "Approved (hardware)"],
 	"log.commandUnavailable": ["命令不可用：{command}", "Command unavailable: {command}"],
 	"log.effortEnum": ["effort: 该构建未暴露推理档目录", "effort: this build does not expose a reasoning level catalog"],
-	"log.emptyAgentKey": ["智能体键 {slot} 为空，双击新建会话", "Agent key {slot} is empty; double-tap starts a new chat"],
+	"log.emptyAgentKey": ["智能体键 {slot} 为空", "Agent key {slot} is empty"],
 	"log.knobLeft": ["左旋", "left"],
 	"log.knobRight": ["右旋", "right"],
 	"log.knobTurn": ["旋钮{dir} → {action}", "Knob {dir} → {action}"],

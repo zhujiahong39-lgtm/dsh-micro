@@ -264,6 +264,9 @@ const services = {
   },
 };
 ctx.get = (name) => services[name];
+// The controller now derives the six slots itself (the panel does not own them
+// any more), so give it the store before the agent-key cases run.
+ctrl.syncAgentSlots();
 
 // 1. a single press on a thread-bound agent key opens/switches that chat — the
 //    reference opens on act===1 and only uses the double tap to raise the
@@ -333,29 +336,31 @@ ctrl.onKey({ k: 'AG02', act: 0 });
 await sleep(20);
 assert.deepEqual(actionCalls, [], 'an empty binding is a thread slot, not an action');
 
-// 2d. the reference focuses on a single press when the window is not in front
-//     (openWindowForAgentTap -> showWindow); only an already-foreground window
-//     needs the double tap. The page's signal for that is document.hasFocus().
+// 2d. the reference switches chats in the background on a single press; the
+//     window is only raised on the second press (or when 单击即切换 is on).
 opened.length = 0;
 focusCalls = 0;
-ctrl.pageHasFocus = () => false;
 ctrl.onKey({ k: 'AG00', act: 1 });
 ctrl.onKey({ k: 'AG00', act: 0 });
 await sleep(20);
-assert.deepEqual(opened, ['s1'], `unfocused page still switches chat: ${JSON.stringify(opened)}`);
-assert.equal(focusCalls, 1, 'an unfocused page is raised on the first press');
+assert.deepEqual(opened, ['s1'], `single press switches chat: ${JSON.stringify(opened)}`);
+assert.equal(focusCalls, 0, 'a single press stays in the background');
+await sleep(20);
+ctrl.onKey({ k: 'AG00', act: 1 });
+ctrl.onKey({ k: 'AG00', act: 0 });
+await sleep(20);
+assert.equal(focusCalls, 1, 'the second press raises the window');
 await sleep(400);
 
+ctrl.settings.singleTapAgentKeys = true;
 opened.length = 0;
 focusCalls = 0;
-ctrl.pageHasFocus = () => true;
 ctrl.onKey({ k: 'AG00', act: 1 });
 ctrl.onKey({ k: 'AG00', act: 0 });
 await sleep(20);
-assert.deepEqual(opened, ['s1'], 'a focused page switches chat');
-assert.equal(focusCalls, 0, 'a focused page is not raised on the first press');
+assert.equal(focusCalls, 1, '单击即切换 raises on the first press');
+ctrl.settings.singleTapAgentKeys = false;
 await sleep(400);
-delete ctrl.pageHasFocus;
 
 // 2e. switching a chat reports the selection right away: the reference reopens
 //     the 4 s selection highlight on the same frame, while the renderer only has
@@ -398,10 +403,70 @@ assert.deepEqual(
   'the host-reported subagent id is excluded',
 );
 ctrl.subagentIds = ['s2'];
+// The controller derives the six slots itself (the panel is not open here), so a
+// subagent id reported by the host must be excluded from that derivation too.
+ctrl.syncAgentSlots();
 opened.length = 0;
 ctrl.openAgentSlot(1);
 assert.deepEqual(opened, ['s3'], `a slot skips the subagent chat: ${JSON.stringify(opened)}`);
 ctrl.subagentIds = [];
+ctrl.syncAgentSlots();
+
+// 2g. a chat created while the panel is closed still reaches the agent keys: the
+//     controller re-derives on its own schedule instead of waiting for the panel.
+services.sessions.list.push({ id: 's4', title: 'just created', updatedAt: 40 });
+ctrl.syncAgentSlots();
+assert.equal(ctrl.agentSlots[0], 's4', 'a new chat becomes the first agent key');
+assert.equal(ctrl.agentSlots[1], 's1', 'the rest follow recency order');
+services.sessions.list = services.sessions.list.filter((entry) => entry.id !== 's4');
+ctrl.syncAgentSlots();
+assert.equal(ctrl.agentSlots[0], 's1', 'removing it re-derives back');
+
+// 2h. the selected chat comes from `uiSession.current` (the binding source the
+//     sidebar writes), never from "the most recent chat": breathing, the 4 s
+//     window, the ambient colour and the selected+focused+unread rule all hang
+//     off this id.
+ctx.get = (name) => (name === 'uiSession' ? { current: { getSnapshot: () => ({ key: 's2' }) } } : services[name]);
+assert.equal(ctrl.currentSessionId(), 's2', 'the open chat is the selected one');
+assert.equal(ctrl.lightHints().selected, 's2', 'the hint carries the open chat');
+ctx.get = (name) => services[name];
+ctrl.lastOpenedSessionId = null;
+assert.notEqual(ctrl.currentSessionId(), 's1', 'never guess the first recent chat as selected');
+
+// 2i. off slots are inert in automatic modes: the device shows them dark, so a
+//     press must not open "the slot-th recent chat" instead.
+ctrl.agentSlots = Array.from({ length: 6 }, () => null);
+opened.length = 0;
+ctrl.openAgentSlot(0);
+assert.deepEqual(opened, [], 'an empty slot does not open some other chat');
+ctrl.syncAgentSlots();
+assert.equal(ctrl.agentSlots[0], 's1', 'the derived slots come back');
+
+// 2j. priority ordering follows the reference OJ comparator:
+//     approval/input/error/waiting > unread > working > idle.
+ctx.get = (name) =>
+  name === 'uiSession'
+    ? {
+        sessionStatus: {
+          getSnapshot: () => new Map([
+            ['s2', { completionUnread: true }],
+            ['s3', { running: true }],
+          ]),
+        },
+      }
+    : services[name];
+const priorityOrder = ctrl
+  .orderAgentEntries(
+    [
+      { id: 's1', updatedAt: 1 },
+      { id: 's2', updatedAt: 2 },
+      { id: 's3', updatedAt: 3 },
+    ],
+    'priority',
+  )
+  .map((entry) => entry.id);
+assert.deepEqual(priorityOrder, ['s2', 's3', 's1'], `priority order: ${priorityOrder}`);
+ctx.get = (name) => services[name];
 
 // 3. split-mic off drops the second switch
 const dispatched = [];
@@ -986,7 +1051,7 @@ const selectionStore = {
   },
 };
 const previousGet = ctx.get;
-ctx.get = (name) => (name === 'uiSession' ? selectionStore : previousGet(name));
+ctx.get = (name) => (name === 'uiSession' ? { current: selectionStore } : previousGet(name));
 assert.equal(ctrl.watchSelection(), true, 'watchSelection subscribes to an observable');
 assert.equal(selectionSubscribed, 1, 'the selection watch subscribed once');
 ctx.get = previousGet;
