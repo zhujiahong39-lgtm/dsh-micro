@@ -689,8 +689,15 @@ assert.equal(voiceStarts, 1);
 assert.equal(voiceStops, 1);
 
 // 8. joystick right maps to the STICK_RIGHT binding
+// Each isolated push resets the circling detector: real hardware streams many
+// samples per turn, while the test jumps straight to one angle (a jump would
+// otherwise read as part of a circle and be captured).
+const resetStickGesture = () => {
+	ctrl.gameGesture = { accumulatedTurns: 0, direction: 0, lastAngle: null, lastAt: null, startedAt: null };
+};
 dispatched.length = 0;
 ctrl.lastStick = 0;
+resetStickGesture();
 ctrl.onStick({ d: 0.9, a: 0.0 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.next'], `joystick right: ${dispatched}`);
@@ -699,16 +706,19 @@ assert.deepEqual(dispatched, ['session.next'], `joystick right: ${dispatched}`);
 //     up = [.625,.875), down = [.125,.375) — this pair used to be swapped.
 dispatched.length = 0;
 ctrl.lastStick = 0;
+resetStickGesture();
 ctrl.onStick({ d: 0.9, a: 0.75 });
 await sleep(10);
 assert.deepEqual(dispatched, ['plan.toggle'], `joystick up: ${dispatched}`);
 dispatched.length = 0;
 ctrl.lastStick = 0;
+resetStickGesture();
 ctrl.onStick({ d: 0.9, a: 0.25 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.new'], `joystick down: ${dispatched}`);
 dispatched.length = 0;
 ctrl.lastStick = 0;
+resetStickGesture();
 ctrl.onStick({ d: 0.9, a: 0.5 });
 await sleep(10);
 assert.deepEqual(dispatched, ['session.prev'], `joystick left: ${dispatched}`);
@@ -886,6 +896,29 @@ ctrl.onStick({ d: 0.9, a: 0.3 });
 assert.equal(ctrl.hud.visible, false, 'no stick HUD until the post-game rearm finishes');
 ctrl.onStick({ d: 0.02, a: 0.3 });
 assert.equal(ctrl.gameRearm, false, 'returning to centre re-arms the gesture');
+
+// Circling is a captured gesture: the reference (`pZ` captured branch) clears the
+// pending action timer, resets the previous direction and returns — direction
+// bindings must NOT fire while the stick is being circled. Only the 1.9-turn
+// activation starts a game.
+dispatched.length = 0;
+ctrl.game = null;
+ctrl.gameRearm = false;
+ctrl.gameGesture = freshGesture();
+ctrl.lastStick = 0;
+ctrl.hud = interactions.JOYSTICK_FEEDBACK.initialFeedback();
+for (let step = 1; step <= 40; step += 1) ctrl.onStick({ d: 0.9, a: (step * 0.02) % 1 });
+assert.deepEqual(dispatched, [], 'circling must not dispatch direction actions');
+assert.equal(ctrl.game, null, '0.8 turns stays below the 1.9-turn activation');
+assert.equal(ctrl.hud.status, 'game-gesture', 'circling shows the game-gesture HUD');
+assert.ok(ctrl.hud.gameActivationProgress > 0 && ctrl.hud.gameActivationProgress < 1, 'the gesture shows partial progress');
+// Leaving the circle and pushing a direction behaves normally again (with a
+// composer present the reference delays the action 220 ms to filter sweeps).
+ctrl.onStick({ d: 0.02, a: 0 });
+dispatched.length = 0;
+ctrl.onStick({ d: 0.9, a: 0.9 });
+await sleep(260);
+assert.deepEqual(dispatched, ['session.next'], `a normal push after the circle fires again: ${dispatched}`);
 
 // Without a composer and without the panel open there is nowhere to render the
 // game; the reference does not activate then, so neither do we (and no game can
