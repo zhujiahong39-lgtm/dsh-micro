@@ -189,13 +189,32 @@ assert.equal(actionLabel('command:git.commit'), 'Git 提交');
 //    section the plugin used to own must be gone.
 const registered = new Map();
 const effects = [];
+// The Host locale service, present like the real host. The plugin binds
+// "dsh-micro" for panel copy and "voice-input" for the official dictation
+// button's aria-label. `officialVoiceLabels` starts empty (the plugin then uses
+// its built-in copy) and section 6i fills it with a non-zh/en language: the
+// official voice-input keys are `retryRecording` / `setupPrompt.trigger`, not
+// our kinds, so this is where a wrong key lookup shows up.
+const officialVoiceLabels = {};
+const localeStub = {
+  register: () => () => {},
+  bind: (ns) => (key) => {
+    if (ns === 'voice-input') return officialVoiceLabels[key];
+    return undefined;
+  },
+  subscribe: () => () => {},
+  getSnapshot: () => ({ active: 'zh' }),
+};
 const ctx = {
   effect(fn, label) {
     effects.push(label);
     const dispose = fn();
     return typeof dispose === 'function' ? dispose : () => {};
   },
-  inject() {},
+  inject(names, fn) {
+    const list = Array.isArray(names) ? names : [names];
+    if (list.includes('locale')) fn({ locale: localeStub });
+  },
   get() {
     return undefined;
   },
@@ -530,6 +549,87 @@ ctrl.onKey({ k: 'ACT10', act: 0 });
 activityPhase = null;
 await sleep(30);
 documentStub.querySelector = plainSelector;
+ctrl.stopVoiceUiWatch();
+
+// 6i. DSH 0.2.2 ships de/es/fr/ja/pt/ru on top of zh/en. The dictation button's
+//     aria-label comes from the voice-input namespace, and two of its keys are
+//     not named like our kinds (`retryRecording`, `setupPrompt.trigger`). With a
+//     language this plugin does not translate, the label must still be found;
+//     a lookup by our own kind falls back to the built-in Chinese copy and
+//     matches nothing.
+officialVoiceLabels.start = '録音開始';
+officialVoiceLabels.stop = '停止して文字起こし';
+officialVoiceLabels.cancel = 'キャンセル';
+officialVoiceLabels.discard = '文字起こしを破棄';
+officialVoiceLabels.retryRecording = 'もう一度録音';
+officialVoiceLabels['setupPrompt.trigger'] = '音声入力の設定を開く';
+
+let jaStart = 0;
+let jaRetry = 0;
+let jaSetup = 0;
+let jaDiscard = 0;
+let startMissing = false;
+let retryMissing = false;
+const jaStartButton = { disabled: false, click: () => { jaStart += 1; activityPhase = 'recording'; } };
+const jaRetryButton = { disabled: false, click: () => { jaRetry += 1; activityPhase = 'recording'; } };
+const jaSetupButton = { disabled: false, click: () => { jaSetup += 1; } };
+const jaDiscardButton = { disabled: false, click: () => { jaDiscard += 1; activityPhase = null; } };
+documentStub.querySelector = (selector) => {
+  if (typeof selector === 'string' && selector.startsWith('button[aria-label=')) {
+    if (selector.includes('もう一度録音')) return retryMissing || activityPhase !== 'feedback' ? null : jaRetryButton;
+    if (selector.includes('文字起こしを破棄')) return activityPhase === 'feedback' ? jaDiscardButton : null;
+    if (selector.includes('音声入力の設定を開く')) return jaSetupButton;
+    if (selector.includes('録音開始')) return startMissing || activityPhase !== null ? null : jaStartButton;
+    // The built-in Chinese/English labels are deliberately absent from this DOM.
+    return null;
+  }
+  if (selector === '[data-voice-activity]') return activityPhase === null ? null : activityElement;
+  return null;
+};
+
+// 6i-1. "record again" row: one press resumes without any zh/en label.
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+activityPhase = 'feedback';
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(jaRetry, 1, 'a ja label must still find the official retry button');
+assert.equal(activityPhase, 'recording');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(430);
+activityPhase = null;
+await sleep(240);
+ctrl.stopVoiceUiWatch();
+
+// 6i-2. a row without "record again": the official discard button clears it (a
+//       missing helper used to throw here), then the same press starts the take.
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+jaRetry = 0;
+retryMissing = true;
+activityPhase = 'feedback';
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(jaRetry, 0);
+assert.equal(jaDiscard, 1, 'the feedback row is dismissed through the official discard button');
+await sleep(140);
+assert.equal(jaStart, 1, 'after dismissing the row the same press starts the next take');
+retryMissing = false;
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(430);
+ctrl.stopVoiceUiWatch();
+
+// 6i-3. no dictation button but a setup trigger: found through setupPrompt.trigger.
+ctrl.voiceState = 'idle';
+ctrl.ptt = { state: 'idle', startedAt: 0, deadline: 0, timer: null, down: false };
+activityPhase = null;
+startMissing = true;
+ctrl.onKey({ k: 'ACT10', act: 1 });
+assert.equal(jaSetup, 1, 'the setup trigger is found through setupPrompt.trigger');
+ctrl.onKey({ k: 'ACT10', act: 0 });
+await sleep(30);
+
+documentStub.querySelector = plainSelector;
+startMissing = false;
+for (const key of Object.keys(officialVoiceLabels)) delete officialVoiceLabels[key];
 ctrl.stopVoiceUiWatch();
 
 // 7. push-to-talk follows the reference state machine (original-runtime.md §6.2)

@@ -23,7 +23,7 @@ dsh plugin --profile desktop add dsh-micro
 
 | 项 | 要求 |
 |---|---|
-| DeepSeek Harness | `>= 0.2.1-rc.3`（清单里的 `engines.dsh` 由市场与安装闸门用来判定兼容性；官方 installer 本身不强制这个字段，所以老宿主装得上但可能跑不对） |
+| DeepSeek Harness | `>= 0.2.1-rc.3`（清单里的 `engines.dsh` 由市场与安装闸门用来判定兼容性；官方 installer 本身不强制这个字段，所以老宿主装得上但可能跑不对）。已在 `0.2.1-rc.5` 与 `0.2.2-rc.1` 上验证：宿主的兼容闸门用 `semver.satisfies(..., { includePrerelease: true })` 判定，`0.2.2-rc.1` 这类预发布版本满足该范围，不需要 `allow-version` 豁免 |
 | Node | `^22.19.0 || >= 24.0.0`（宿主自带的运行时，插件不下载 node） |
 | 系统 | Windows 10+ / macOS / Linux（HID 运行时自带各平台预编译产物） |
 
@@ -200,6 +200,7 @@ USERPROFILE=/tmp/cm-home npm run test:host
 
 - 宿主未暴露的命令（`git.*`、`toggleTerminal` 等）只会给出「此操作在此处不可用」，不会静默假装成功。
 - 按住说话依赖宿主的语音服务（`voice` / `remote.voice` / `dictation`）；没有时不录音，只提示。
+- **界面只有中英两套文案**。DSH 0.2.2 新增 de/es/fr/ja/pt/ru 后，面板在这 6 种语言下回落到英文（宿主语言链以 `en` 收尾）；麦克风键仍能工作——它按官方 `voice-input` 词条（`start`/`stop`/`cancel`/`discard`/`retryRecording`/`setupPrompt.trigger`）查找听写按钮，不依赖插件自己的语言。
 - 命令面板的 182 个原版 commandId 只接入能在 Harness 落地的那部分。
 - **浅色主题没有在真实浏览器里逐项目检过**。所有颜色都取自宿主令牌（`test/tokens.mjs` 守住），但对比度、间距、悬停态没有截图验证；这条不算通过，只是没有已知问题。
 
