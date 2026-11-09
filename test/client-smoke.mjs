@@ -1002,6 +1002,15 @@ ctrl.onEncoder('ENC_CW', 2);
 assert.equal(ctrl.knobAnim, 'clockwise', 'clockwise pulse lights the right dot');
 await sleep(260);
 assert.equal(ctrl.knobAnim, null, 'knob pulse clears after 220 ms');
+// Compatible firmwares may report one `ENC` key with the direction in the
+// payload instead of dedicated ENC_CW/ENC_CC keys; the pulse must still fire.
+ctrl.onEncoder('ENC', 2, { delta: -1 });
+assert.equal(ctrl.knobAnim, 'counterclockwise', 'a payload-direction knob still lights the left dot');
+await sleep(260);
+assert.equal(ctrl.knobAnim, null, 'the payload-direction pulse clears too');
+ctrl.onEncoder('ENC', 1);
+ctrl.onEncoder('ENC', 0);
+assert.equal(ctrl.knobAnim, null, 'a plain encoder press is not a rotation');
 
 // Each engine runs a frame and paints at least one primitive.
 for (const id of interactions.MINI_GAME_IDS) {
