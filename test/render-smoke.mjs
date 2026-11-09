@@ -491,14 +491,21 @@ ctrl.hud = {
 };
 const hudHtml = renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay));
 assert.ok(hudHtml.includes('cm-overlay'), 'overlay root was not rendered');
+assert.ok(hudHtml.includes('cm-overlay-hud'), 'the HUD was not mounted at the page top');
 assert.ok(hudHtml.includes('cm-hud'), 'HUD was not rendered into the overlay');
 assert.ok(hudHtml.includes('计划模式'), 'HUD lost the action title');
-assert.ok(hudHtml.includes('top:700') || hudHtml.includes('bottom:'), 'overlay was not positioned above the composer');
+// The reference renders the HUD at the page's top centre (absolute top-14), not
+// above the composer: the wrapper carries the fixed top anchor, so no inline
+// composer geometry may show up for it.
+assert.ok(!hudHtml.includes('cm-overlay-game'), 'no game surface before a game starts');
 
 ctrl.game = { id: 'snake', joystick: { angle: 0, distance: 0 }, fireRequested: false, startedAt: Date.now() };
 const gameHtml = renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay));
 assert.ok(gameHtml.includes('cm-game-card'), 'the mini-game was not rendered into the overlay');
 assert.ok(gameHtml.includes('cm-game-canvas'), 'the mini-game canvas is missing');
+// Reference handler (`eu`) returns early while a game runs, so the stick HUD must
+// not be painted during gameplay.
+assert.ok(!gameHtml.includes('cm-overlay-hud'), 'the stick HUD must stay hidden while a mini-game runs');
 ctrl.game = null;
 ctrl.hud = { action: null, actionTitle: null, direction: 'right', status: 'tracking', visible: false, gameActivationProgress: 0, event: { angle: 0, distance: 0 } };
 

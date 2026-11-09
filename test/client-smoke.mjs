@@ -872,6 +872,21 @@ ctrl.stopMiniGame();
 assert.equal(ctrl.game, null);
 assert.equal(ctrl.gameRearm, true, 'stopping a game re-arms the gesture');
 
+// While a game runs (and until the stick re-centres afterwards) the reference
+// joystick handler returns early, so the stick HUD is never painted.
+ctrl.gameRearm = false;
+ctrl.hud = { ...interactions.JOYSTICK_FEEDBACK.initialFeedback(), visible: true, status: 'tracking', event: { angle: 0.2, distance: 0.6 } };
+ctrl.game = { id: 'snake', joystick: { angle: 0, distance: 0 }, fireRequested: false, startedAt: Date.now() };
+ctrl.onStick({ d: 0.9, a: 0.3 });
+assert.equal(ctrl.hud.visible, false, 'no stick HUD while a mini-game is running');
+assert.equal(ctrl.game.joystick.distance, 0.9, 'the stick still feeds the running game');
+ctrl.game = null;
+ctrl.gameRearm = true;
+ctrl.onStick({ d: 0.9, a: 0.3 });
+assert.equal(ctrl.hud.visible, false, 'no stick HUD until the post-game rearm finishes');
+ctrl.onStick({ d: 0.02, a: 0.3 });
+assert.equal(ctrl.gameRearm, false, 'returning to centre re-arms the gesture');
+
 // Without a composer and without the panel open there is nowhere to render the
 // game; the reference does not activate then, so neither do we (and no game can
 // run invisibly in the background).
