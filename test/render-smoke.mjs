@@ -462,6 +462,62 @@ assert.ok(
 );
 assert.ok(!leaked(htmlEn), `raw message key leaked into english panel: ${leaked(htmlEn)}`);
 
+// Composer overlay: the HUD and the mini-game hang above the chat input, as in
+// the reference (composer context), not only inside the panel.
+const ctrl = moduleExports.__controller();
+assert.ok(ctrl, 'controller missing after apply()');
+const composerNode = {
+  nodeType: 1,
+  isConnected: true,
+  tagName: 'TEXTAREA',
+  disabled: false,
+  readOnly: false,
+  closest: () => null,
+  getBoundingClientRect: () => ({ left: 320, right: 960, top: 700, bottom: 744, width: 640, height: 44 }),
+};
+const plainQuerySelectorAll = documentStub.querySelectorAll;
+const plainQuerySelector = documentStub.querySelector;
+windowStub.innerHeight = 900;
+documentStub.querySelectorAll = (selector) =>
+  String(selector).includes('contenteditable') || String(selector).includes('textarea') ? [composerNode] : [];
+ctrl.hud = {
+  action: 'plan.toggle',
+  actionTitle: '计划模式',
+  direction: 'up',
+  status: 'tracked',
+  visible: true,
+  gameActivationProgress: 0,
+  event: { angle: 0.75, distance: 0.6 },
+};
+const hudHtml = renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay));
+assert.ok(hudHtml.includes('cm-overlay'), 'overlay root was not rendered');
+assert.ok(hudHtml.includes('cm-hud'), 'HUD was not rendered into the overlay');
+assert.ok(hudHtml.includes('计划模式'), 'HUD lost the action title');
+assert.ok(hudHtml.includes('top:700') || hudHtml.includes('bottom:'), 'overlay was not positioned above the composer');
+
+ctrl.game = { id: 'snake', joystick: { angle: 0, distance: 0 }, fireRequested: false, startedAt: Date.now() };
+const gameHtml = renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay));
+assert.ok(gameHtml.includes('cm-game-card'), 'the mini-game was not rendered into the overlay');
+assert.ok(gameHtml.includes('cm-game-canvas'), 'the mini-game canvas is missing');
+ctrl.game = null;
+ctrl.hud = { action: null, actionTitle: null, direction: 'right', status: 'tracking', visible: false, gameActivationProgress: 0, event: { angle: 0, distance: 0 } };
+
+// Panel open: the panel already draws the HUD/game, so the overlay must stay out
+// of the way instead of double-rendering (and double-stepping) the game.
+documentStub.querySelector = (selector) =>
+  String(selector) === '.cm-root' ? { getBoundingClientRect: () => ({ width: 640, height: 900 }) } : null;
+assert.equal(renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay)), '', 'overlay must stay hidden while the panel is mounted');
+// A panel node left mounted but not visible must not suppress the overlay.
+ctrl.hud = { ...ctrl.hud, visible: true };
+documentStub.querySelector = (selector) =>
+  String(selector) === '.cm-root' ? { getBoundingClientRect: () => ({ width: 0, height: 0 }) } : null;
+assert.ok(
+  renderToStaticMarkup(React.createElement(moduleExports.__components.ComposerOverlay)).includes('cm-overlay'),
+  'a hidden panel must not hide the composer overlay',
+);
+documentStub.querySelector = plainQuerySelector;
+documentStub.querySelectorAll = plainQuerySelectorAll;
+
 const keyWarnings = reactWarnings.filter((line) => /key[^\n]*(prop|spread)|spread[^\n]*key/i.test(line));
 assert.deepEqual(keyWarnings, [], `React key-in-props warning: ${keyWarnings[0] ?? ''}`);
 

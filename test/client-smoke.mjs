@@ -844,6 +844,24 @@ assert.equal(triggered.status, 'triggered', 'the trigger tick reports the dispat
 assert.equal(triggered.direction, 'up');
 
 // Circling the stick (1.9 turns in <6 s) starts one of the three mini-games.
+// The reference only activates with a composer context; the composer is what the
+// overlay canvas hangs above, so the test provides one here.
+windowStub.innerHeight = 900;
+const composerNode = {
+  nodeType: 1,
+  isConnected: true,
+  tagName: 'TEXTAREA',
+  disabled: false,
+  readOnly: false,
+  closest: () => null,
+  getBoundingClientRect: () => ({ left: 300, right: 940, top: 700, bottom: 740, width: 640, height: 40 }),
+};
+documentStub.querySelectorAll = (selector) =>
+  String(selector).includes('contenteditable') || String(selector).includes('textarea') ? [composerNode] : [];
+assert.equal(interactions.findComposerElement(), composerNode, 'a visible textarea is the composer');
+assert.equal(interactions.canHostMiniGame(), true, 'composer present: a game has somewhere to draw');
+const plainQuerySelectorAll = () => [];
+
 ctrl.game = null;
 ctrl.gameRearm = false;
 ctrl.gameGesture = { accumulatedTurns: 0, direction: 0, lastAngle: null, lastAt: null, startedAt: null };
@@ -853,6 +871,18 @@ assert.ok(interactions.MINI_GAME_IDS.includes(ctrl.game.id), `unknown game ${ctr
 ctrl.stopMiniGame();
 assert.equal(ctrl.game, null);
 assert.equal(ctrl.gameRearm, true, 'stopping a game re-arms the gesture');
+
+// Without a composer and without the panel open there is nowhere to render the
+// game; the reference does not activate then, so neither do we (and no game can
+// run invisibly in the background).
+documentStub.querySelectorAll = plainQuerySelectorAll;
+assert.equal(interactions.findComposerElement(), null, 'no composer once the textarea is gone');
+assert.equal(interactions.canHostMiniGame(), false, 'no composer, no panel: the gesture must stay inert');
+ctrl.game = null;
+ctrl.gameRearm = false;
+ctrl.gameGesture = { accumulatedTurns: 0, direction: 0, lastAngle: null, lastAt: null, startedAt: null };
+for (let step = 1; step <= 140; step += 1) ctrl.onStick({ d: 0.9, a: (step * 0.02) % 1 });
+assert.equal(ctrl.game, null, 'circling without a composer must not start a game');
 
 // Knob pulses drive the ring/dot animation and clear themselves.
 ctrl.onEncoder('ENC_CW', 2);
